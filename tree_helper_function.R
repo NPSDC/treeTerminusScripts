@@ -1,3 +1,11 @@
+library(tximeta)
+library(tximport)
+library(ape)
+library(phangorn)
+library(fishpond)
+library(SummarizedExperiment)
+library(TreeSummarizedExperiment)
+
 ## Given a tree of phylo, convert it into a data frame needed by BOUTH or treeRowData
 getTreeDf <- function(tree) {
     nleaves <- length(tree$tip.label)
@@ -30,10 +38,17 @@ mergeTree <- function(trees, updateInd = T, rowInd = T, tnames = NULL) {
     return(tree)
 }
 
-## Given a tree run swish only on the filtered txps along with the grouped txps
-runSwishtree <- function(tree, ySwish) {
-    tInds <- union(as.numeric(tree$tip.label), which(mcols(ySwish)$keep))
+## Given a tree run swish only on the filtered txps along with the group txps obtained by terminus
+## type in c("union", "tree")
+runSwishtree <- function(tree, ySwish, type) {
+    if(!type %in% c("union", "tree"))
+        stop(paste("invalid type", type))
+    if(type == "union")
+        tInds <- union(as.numeric(tree$tip.label), which(mcols(ySwish)$keep))
+    if(type == "tree")
+        tInds <- as.numeric(tree$tip.label)
     ySwish <- ySwish[tInds,]
+    mcols(ySwish)[,'keep'] <- TRUE
     set.seed(1)
     ySwish <- swish(ySwish, x="condition")
     return(ySwish)
@@ -56,8 +71,44 @@ mergeLeaves <- function(tree, ySwish, se) {
     if(l != 0)
         stop(paste("Indexes do not match", l))
     
+    if(!is.null(se))
+        tree <- convTree(tree, ySwish, se)
+    return(tree)
+}
+
+### Arrange indices in the order of the tree that has been specified in the updated SE
+convTree <- function(tree, ySwish, se) {
     tInds <- as.numeric(tree$tip.label)
     updatedInds <- match(rownames(se)[tInds], rownames(ySwish))
     tree$tip.label <- as.character(updatedInds)
     return(tree)
+}
+
+readTrueCounts <- function(files, sNames) {
+    if(length(sNames) != length(files))
+        stop("length of files not same as samples")
+    ncol = length(length)
+    txps = c()
+    
+    for(i in seq_along(files)){
+        df <- read.table(files[i], header=T, stringsAsFactors = F)
+        txps <- union(txps, df[,1])
+    }
+    cMat <- matrix(0, nrow=length(txps), ncol = length(sNames), dimnames = list(txps, sNames))
+    for(i in seq_along(files)) {
+        df <- read.table(files[i], header=T, stringsAsFactors = F)
+        cMat[df[["Transcript"]],i] <- df[,"Counts"]
+    }
+    return(cMat)
+}
+
+createTreeSummarizedObject <- function(ySe, rTreeDf, rTree) {
+    #rData <- cbind(rowData(ySe), rTreeDf)
+    tse <- TreeSummarizedExperiment(assays = list(Count = assays(ySe)[["counts"]]),
+                                        rowData = rTreeDf,
+                                        colData = colData(ySe),
+                                        rowTree = rTree,
+                                        rowNodeLab = rTree$tip.label
+                                    )
+    return(tse)
 }
