@@ -11,7 +11,7 @@ getTreeDf <- function(tree) {
     nleaves <- length(tree$tip.label)
     maxDepth <- max(node.depth(tree, 2))
     
-    df <- data.frame(matrix("Undefined",nrow = nleaves, ncol = maxDepth, dimnames=list(c(tree$tip.label), paste("Group", c(1:maxDepth), sep="_"))))
+    df <- data.frame(matrix("unknown",nrow = nleaves, ncol = maxDepth, dimnames=list(c(tree$tip.label), paste("Group", c(1:maxDepth), sep="_"))))
     df[,maxDepth] <- tree$tip.label
     colnames(df)[maxDepth] <- "LEAF"
     des <- lapply(seq(1:nleaves), function(i) Ancestors(tree, i))
@@ -25,7 +25,7 @@ getTreeDf <- function(tree) {
 }
 
 ## Given a list of trees create one unified tree such all individual trees are children of one root node
-mergeTree <- function(trees, updateInd = T, rowInd = T, tnames = NULL) {
+mergeTree <- function(trees, updateInd = T, rowInd = T, tnames = NULL, se = NULL) {
     if(updateInd) {### Because of Salmon is 0 index and R is 1 index
         trees <- lapply(trees, function(tree) {
             tree$tip.label = as.character(as.numeric(tree$tip.label)+1)
@@ -35,6 +35,8 @@ mergeTree <- function(trees, updateInd = T, rowInd = T, tnames = NULL) {
     
     nwk <- paste("(",paste(sapply(trees, function(tree) gsub(";", "", write.tree(tree))), collapse = ","), ");", sep = "")
     tree <- read.tree(text = nwk)
+    if(!is.null(se))
+        tree$tip.label <- rownames(se)[as.numeric(tree$tip.label)]
     return(tree)
 }
 
@@ -44,10 +46,10 @@ runSwishtree <- function(tree, ySwish, type) {
     if(!type %in% c("union", "tree"))
         stop(paste("invalid type", type))
     if(type == "union")
-        tInds <- union(as.numeric(tree$tip.label), which(mcols(ySwish)$keep))
+        tnames <- union(tree$tip.label, rownames(ySwish)[mcols(ySwish)$keep])
     if(type == "tree")
-        tInds <- as.numeric(tree$tip.label)
-    ySwish <- ySwish[tInds,]
+        tnames <- tree$tip.label
+    ySwish <- ySwish[tnames,]
     mcols(ySwish)[,'keep'] <- TRUE
     set.seed(1)
     ySwish <- swish(ySwish, x="condition")
@@ -56,23 +58,23 @@ runSwishtree <- function(tree, ySwish, type) {
 
 ## Given the updated swim seObject, update the indexes of tree that correspond to those indexes and also add the remaining leaf nodes 
 mergeLeaves <- function(tree, ySwish, se) {
-    seInds <- match(rownames(ySwish), rownames(se))
-    missing_inds <- setdiff(seInds, as.numeric(tree$tip.label))
-    if(length(missing_inds) > 0)
+    #seInds <- match(rownames(ySwish), rownames(se))
+    missing_txps <- setdiff(rownames(ySwish), tree$tip.label)
+    if(length(missing_txps) > 0)
     {
-        print(paste("Missing txps", length(missing_inds)))
-        remLeaves <- paste(as.character(missing_inds), collapse = ",")
+        print(paste("Missing txps", length(missing_txps)))
+        remLeaves <- paste(as.character(missing_txps), collapse = ",")
         nwk <- write.tree(tree)
         nwk <- substr(nwk, 2, nchar(nwk)-2)
         nwk <- paste("(", remLeaves, ",", nwk, ");", sep = "")
         tree <- read.tree(text = nwk)
     }
-    l <- length(setdiff(seInds, as.numeric(tree$tip.label)))
-    if(l != 0)
-        stop(paste("Indexes do not match", l))
+    #l <- length(setdiff(seInds, as.numeric(tree$tip.label)))
+    # if(l != 0)
+    #     stop(paste("Indexes do not match", l))
     
-    if(!is.null(se))
-        tree <- convTree(tree, ySwish, se)
+    # if(!is.null(se))
+    #     tree <- convTree(tree, ySwish, se)
     return(tree)
 }
 

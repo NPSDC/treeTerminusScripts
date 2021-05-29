@@ -1,0 +1,101 @@
+---
+title: "Comparison"
+output: html_document
+---
+
+```{r}
+library(BOUTH)
+source("tree_helper_function.R")
+load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
+load("environment/se_swim.RData")
+load("environment/ygroup.RData")
+trees <- read.tree("../terminus/data/term/cluster_nwk.txt")
+tLengths <- sapply(trees, function(x) length(x$tip.label))
+tree <- mergeTree(trees, se = seSwim)
+
+```
+
+### Loading BOUTH run using Swish and DESeq2
+```{r}
+load("environment/bouth_sim.RData") ## DESeq2
+load("environment/bouth_test_group.RData") ## Swish
+bouth_swish <- bouth_test$fdr_0.05
+bouth_deseq <- bouth_sim
+```
+
+### Overlap between detected nodes
+```{r}
+print(head(bouth_swish$results.by.level))
+print(head(bouth_deseq$results.by.level))
+
+print(tail(bouth_swish$results.by.level))
+print(tail(bouth_deseq$results.by.level))
+
+dediff <- which(bouth_deseq$tree@test$reject)
+swdiff <- which(bouth_swish$tree@test$reject)
+print(paste(length(dediff), length(swdiff), length(intersect(swdiff, dediff))))
+```
+There exists a huge overlap between both the methods with 2900 nodes overlapping
+
+
+```{r}
+.StoufferCombination<-function(pvalue){
+  nan.pvalue = pvalue[!is.na(pvalue)]
+  n = sum(nan.pvalue<=1)
+  if(n>0){
+    z.stat = sum(qnorm(1-nan.pvalue))/sqrt(n)
+    return(1-pnorm(z.stat))
+  }else{
+    return(0)
+  }
+}
+```
+
+```{r}
+pdeseq <- bouth_sim$tree@test$pvalue
+pswish <- bouth_swish$tree@test$pvalue
+print(hist(pdeseq))
+print(hist(pswish))
+plot(pdeseq, pswish)
+
+lev_inds <- which(bouth_sim$tree@node$level==92) ##Indices just above root
+
+lev_diff_deseq <- intersect(lev_inds, dediff)
+lev_diff_swish <- intersect(lev_inds, swdiff)
+
+lev_undiff_deseq <- setdiff(lev_inds, lev_diff_deseq)
+lev_undiff_swish <- setdiff(lev_inds, lev_diff_swish)
+```
+
+### Pvalues for detected nodes
+```{r}
+print(hist(pdeseq[lev_diff_deseq]))
+print(hist(pswish[lev_diff_swish]))
+```
+
+### Pvalues for undetected nodes
+```{r}
+print(hist(pdeseq[lev_undiff_deseq]))
+print(hist(pswish[lev_undiff_swish]))
+
+alphaDeseq <- bouth_deseq$results.by.level[92,4]
+alphaSwish <- bouth_swish$results.by.level[92,4]
+print(paste(alphaDeseq, alphaSwish))
+
+pDeUniform <- (pdeseq[lev_undiff_deseq] - alphaDeseq)/(1-alphaDeseq)
+pSwUniform <- (pswish[lev_undiff_swish] - alphaSwish)/(1-alphaSwish)
+
+print(paste(.StoufferCombination(pSwUniform), .StoufferCombination(pDeUniform), sep = ","))
+print(hist(pDeUniform))
+print(hist(pSwUniform))
+```
+cutoffs at the node below are similar but pvalue for the root is very different, similarly the cutoff for the root is very different.
+Problem is both the pvalue and the threshold
+
+```{r}
+#b <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.05, is.weighted = FALSE)
+#pvalues <- mcols(y)[rownames(treeUDf),"pvalue"]
+#save(p, file="environment/b_unweighted.RData")
+load("environment/b_unweighted.RData")
+print(tail(b$results.by.level))
+```
