@@ -12,7 +12,7 @@ load("environment/se_swim.RData")
 ### Reading trees
 trees <- read.tree("../terminus/data/term/cluster_nwk.txt")
 tLengths <- sapply(trees, function(x) length(x$tip.label))
-tree <- mergeTree(trees)
+tree <- mergeTree(trees, se = seSwim)
 
 ### Running Swish
 # y <- scaleInfReps(seSwim)
@@ -49,17 +49,17 @@ save(bouth_test, file="environment/bouth_test_all.RData")
 
 
 ### Limiting the set
-tree <- mergeTree(trees)
+tree <- mergeTree(trees, se = seSwim)
 y <- scaleInfReps(seSwim)
 y <- labelKeep(y)
 y <- runSwishtree(tree, y, type = "tree")
-tree <- convTree(tree, y, seSwim)
+#tree <- convTree(tree, y, seSwim)
 treeDfGroup <- getTreeDf(tree)
 save(tree, file="environment/tree_group.RData")
 save(treeDfGroup, file="environment/treeDfGroup.RData")
 save(y, file="environment/ygroup.RData")
 
-pvalues <- mcols(y)[["pvalue"]][as.numeric(rownames(treeDfGroup))]
+pvalues <- mcols(y)[rownames(treeDfGroup),"pvalue"]
 plot(hist(pvalues))
 bouth_test <- list()
 bouth_test[['fdr_0.1']] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.1, is.weighted = TRUE)
