@@ -1,1 +1,5 @@
 environment
+*.PDF
+*.html
+*.log
+*.tex

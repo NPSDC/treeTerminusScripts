@@ -1,0 +1,197 @@
+---
+title: "Testing BOUTH Differential"
+author: "Noor Pratap Singh"
+date: "5/29/2021"
+output: html_document
+---
+
+```{r}
+source("tree_helper_function.R")
+source("bouth_helper.R")
+load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
+load("environment/se_swim.RData")
+load("environment/ygroup.RData")
+load("environment/bouth_true.RData")
+load("environment/bouth_sim.RData")
+load("environment/treeDfGroup.RData")
+load("environment/tree_group.RData")
+library(ggplot2)
+```
+
+
+#### Modifying the true counts matrices
+```{r}
+missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+print(length(missingTxps))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[rownames(y),] ###Arranging in the manner of y
+
+innNodes <- nrow(sim.counts.mat)+1:tree$Nnode
+aggCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), sim.counts.mat)
+fold_changes <- rbind(fold_changes, matrix(0, nrow = length(missingTxps), ncol = ncol(fold_changes),
+                                               dimnames = list(missingTxps, colnames(fold_changes))))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1])) 
+fold_changes <- fold_changes[rownames(y),]
+
+trueCountNodes <- which(abs(logFCNodes) >= 0.066) ##Making sure root is non differentiated
+print(length(trueCountNodes)) ## Total differential nodes
+print(sum(trueCountNodes <= nrow(y))) ## Differential txps
+trueLeaves <- union(trueCountNodes[trueCountNodes <= nrow(y)],unlist(Descendants(tree,trueCountNodes[trueCountNodes > nrow(y)])))
+print(length(trueLeaves))
+
+###Used in swish paper 
+# iso.any <- iso.dtu | iso.dte | iso.dge
+```
+Around 8K txps are missing, we account for these by adding 0s, setting logFC also equal to 0 
+A total of 38K nodes with around 23K txps
+Around 7K nodes are differentially expressed containing 3300 txps and if the all the underlying leaves are considered then 6400 txps
+
+### Evaluations
+#### Driver nodes, with ground truth being bouth run on true data
+Here we compare when running BOUTH on pvalues obtained by running DESeq2 on true data as our ground truth
+We have further two comparisons
+    - comparing at the node level (where driver nodes aka both inner nodes/leaves are directly compared)
+    - comparing the leaves (where an inner node is replaced by the descendant leaf). We will call this **leaf** evaluation henceforth.
+```{r}
+trueDetNodes <- sapply(bouth_true, function(b) extractBouthNodes(b, y))
+simDetNodes <- sapply(bouth_sim, function(b) extractBouthNodes(b, y))
+
+## Using only driver Nodes
+stats <- mapply(function(x,z) {
+    computeTPFP(x, z, y, logFCNodes, tree, pTab=T)
+}, trueDetNodes, simDetNodes)
+print(stats)
+
+## Using leaves of driver nodes
+stats <- mapply(function(x,z) {
+    computeTPFP(x, z, y, logFCNodes, tree, type="leaves", pTab=T)
+}, trueDetNodes, simDetNodes)
+print(stats)
+```
+
+#### Truth being defined on true data and using leaves
+Here the ground truth is the actual true Nodes, where a node(inner or leaf) is called differentially expressed when the logFC is > 0.066. We compare with the ground truth both the bouth results on the simulated and true data
+```{r}
+### Simulated data
+stats <- sapply(simDetNodes, function(x) computeTPFP(trueCountNodes, x, y, logFCNodes, tree, type = "leaves"))
+print(stats)
+### True data
+stats <- sapply(trueDetNodes, function(x) computeTPFP(trueCountNodes, x, y, logFCNodes, tree, type = "leaves"))
+print(stats)
+```
+
+
+#### logFC differences
+```{r}
+aggSimCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), assays(y)[["counts"]], list(c(1:6),c(7:12)))
+logFCSimNodes <- ifelse(rowSums(aggSimCountsNodes)==0, 0, log2(aggSimCountsNodes[,2]/aggSimCountsNodes[,1])) 
+```
+##### All nodes
+```{r}
+print(plot(logFCNodes, logFCSimNodes) + abline(0,1))
+```
+
+##### Signifcant nodes by true counts
+```{r}
+print(plot(logFCNodes[trueCountNodes], logFCSimNodes[trueCountNodes]) + abline(0,1))
+```
+
+##### Signifcant nodes that are detected by BOUTH
+```{r}
+print(plot(logFCNodes[simDetNodes[["0.05"]]], logFCSimNodes[simDetNodes[["0.05"]]]) + abline(0,1))
+```
+
+##### Non-Signficant nodes
+```{r}
+s <- setdiff(seq(length(logFCNodes)), trueCountNodes)
+print(plot(logFCNodes[s], logFCSimNodes[s]) + abline(0,1))
+```
+
+#### Differences between the log fold changes
+Some differences go to infinity as well
+```{r}
+diff <- logFCSimNodes-logFCNodes
+diff[is.nan(diff)] <- 0
+ggplot(data.frame(x=rep("x", length(diff)), diff = diff), aes(x = x,y=diff)) + geom_violin()
+ggplot(data.frame(x=rep("x", length(diff)), diff = diff), aes(x = x,y=diff)) + geom_boxplot()
+```
+
+
+### Breaking down things by logFC
+Using the indices obtained on the observed data and stratifying by the logFC changes
+
+#### Sim vs True all nodes
+
+##### Node Level
+```{r}
+cutL <- cut_number(abs(logFCSimNodes), 4)
+print(table(cutL))
+lInds <- sapply(levels(cutL), function(l) which(cutL==l))
+nRes <- vector(mode = "list", length = length(simDetNodes))
+names(nRes) <- names(simDetNodes)
+for(i in seq_along(simDetNodes))
+{
+    sim <- simDetNodes[[i]]
+    true <- trueDetNodes[[i]]
+    nRes[[i]] <- sapply(lInds, function(x) 
+    {
+        sim <- intersect(x, simDetNodes[[i]])
+        true <- intersect(x, trueDetNodes[[i]])
+        computeTPFP(true, sim, y, logFCNodes, tree)
+    })
+}
+print(nRes)
+```
+
+##### Leaf Level
+```{r}
+nResL <- vector(mode = "list", length = length(simDetNodes))
+names(nResL) <- names(simDetNodes)
+for(i in seq_along(simDetNodes))
+{
+    sim <- simDetNodes[[i]]
+    true <- trueDetNodes[[i]]
+    nResL[[i]] <- sapply(lInds, function(x) 
+    {
+        sim <- intersect(x, simDetNodes[[i]])
+        true <- intersect(x, trueDetNodes[[i]])
+        computeTPFP(true, sim, y, logFCNodes, tree, type = "leaves")
+    })
+}
+print(nResL)
+```
+
+##### Simulated and true counts
+```{r}
+nResS <- vector(mode = "list", length = length(simDetNodes))
+names(nResS) <- names(simDetNodes)
+for(i in seq_along(simDetNodes))
+{
+    sim <- simDetNodes[[i]]
+    nResS[[i]] <- sapply(lInds, function(x) 
+    {
+        sim <- intersect(x, simDetNodes[[i]])
+        true <- intersect(x, trueCountNodes)
+        computeTPFP(true, sim, y, logFCNodes, tree, type = "leaves")
+    })
+}
+print(nResS)
+```
+
+##### BOUTH on True with True Counts
+```{r}
+nResT <- vector(mode = "list", length = length(simDetNodes))
+names(nResT) <- names(simDetNodes)
+for(i in seq_along(simDetNodes))
+{
+    sim <- simDetNodes[[i]]
+    nResT[[i]] <- sapply(lInds, function(x) 
+    {
+        sim <- intersect(x, trueDetNodes[[i]])
+        true <- intersect(x, trueCountNodes)
+        computeTPFP(true, sim, y, logFCNodes, tree, type = "leaves")
+    })
+}
+print(nResT)
+```

@@ -114,3 +114,34 @@ createTreeSummarizedObject <- function(ySe, rTreeDf, rTree) {
                                     )
     return(tse)
 }
+
+## For a given node/s compute the aggreated sum across the leaves and then take the average across the replicates for each condition
+computeAggNodes <- function(tree, nodeID, se_counts, group_inds = list(c(1),c(2))) {
+    performColAgg <- function(counts, group_inds) {
+        if(!is.null(dim(counts)))
+            counts <- colSums(counts)
+        vals <- sapply(group_inds, function(x) mean(counts[x]))
+        vals
+    }
+    
+    if(!is.numeric(nodeID))
+    {
+        nodeID <- as.numeric(nodeID)
+        if(sum(is.na(nodeID)) > 0)
+            stop("Node ids contain a non numeric")
+    }
+    df <- matrix(0, nrow = length(nodeID), ncol = length(group_inds))
+    leaves <- which(nodeID <= nrow(se_counts))
+    innNodes <- which(nodeID > nrow(se_counts))
+    
+    for(i in seq_along(leaves))
+        df[i,] <- performColAgg(se_counts[i,], group_inds)
+    
+    lInds <- Descendants(tree, nodeID[innNodes], type = "tips")
+    if(is.null(i))
+        i <- 0
+    for(j in seq_along(lInds))
+        df[i+j,] <- performColAgg(se_counts[lInds[[j]],], group_inds)
+    return(df)
+}
+

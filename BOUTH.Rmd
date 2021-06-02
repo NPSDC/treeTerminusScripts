@@ -92,8 +92,10 @@ print(dim(treeDfGroup))
 pvalues <- mcols(y)[["pvalue"]][as.numeric(rownames(treeDfGroup))]
 plot(hist(pvalues))
 # bouth_test <- list()
+# bouth_test[['fdr_0.1']] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.1, is.weighted = TRUE)
 # bouth_test[['fdr_0.01']] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.01, is.weighted = TRUE)
 # bouth_test[['fdr_0.05']] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.05, is.weighted = TRUE)
+# bouth_test <- bouth_test[c(2,3,1)]
 # save(bouth_test, file = "environment/bouth_test_group.RData")
 load("environment/bouth_test_group.RData")
 print(sum(bouth_test$fdr_0.01$results.by.node[,"is.driver"]))
@@ -113,8 +115,12 @@ Since many txps get pvalue as NA, they are set to 1
 # res$padj[is.na(res$padj)] <- 1
 # save(res, file="environment/resDeseq2_sim.RData")
 load("environment/resDeseq2_sim.RData")
-pvalues <- res$pvalue[match(rownames(res),rownames(y)[as.numeric(tree$tip.label)])]
-# bouth_sim <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.05, is.weighted = TRUE)
+pvalues <- res[rownames(y), "pvalue"]
+bouth_sim <- list()
+# bouth_sim[["0.1"]] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.1, is.weighted = TRUE)
+# bouth_sim[["0.05"]] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.05, is.weighted = TRUE)
+# bouth_sim[["0.01"]] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.01, is.weighted = TRUE)
+# bouth_sim <- bouth_sim[c(2,3,1)]
 # save(bouth_sim, file="environment/bouth_sim.RData")
 tseSim <- createTreeSummarizedObject(y, treeDfGroup, tree)
 load("environment/bouth_sim.RData")
@@ -142,8 +148,12 @@ print(length(mTxps))
 # resTrue$padj[is.na(resTrue$padj)] <- 1
 # save(resTrue, file="environment/resDeseq2_true.RData")
 load("environment/resDeseq2_true.RData")
-pvalues <- resTrue$pvalue[match(rownames(resTrue),rownames(y)[as.numeric(tree$tip.label)])]
-# bouth_true <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.05, is.weighted = TRUE)
+pvalues <- resTrue[rownames(y),"pvalue"]
+bouth_true <- list()
+# bouth_true[["0.01"]] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.01, is.weighted = TRUE)
+# bouth_true[["0.05"]] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.05, is.weighted = TRUE)
+# bouth_true[["0.1"]] <- bouth(anno.table = treeDfGroup, pvalue.leaves = pvalues, na.symbol = "Undefined", far = 0.1, is.weighted = TRUE)
+# bouth_true <- bouth_true[c(2,3,1)]
 # save(bouth_true, file="environment/bouth_true.RData")
 load("environment/bouth_true.RData")
 print(sum(bouth_true$results.by.node[,"is.driver"]))
