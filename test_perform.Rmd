@@ -27,7 +27,7 @@ sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), nc
                                                dimnames = list(missingTxps, colnames(sim.counts.mat))))
 sim.counts.mat <- sim.counts.mat[rownames(y),] ###Arranging in the manner of y
 
-innNodes <- nrow(sim.counts.mat)+1:tree$Nnode
+innNodes <- nrow(y)+1:tree$Nnode
 aggCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), sim.counts.mat)
 fold_changes <- rbind(fold_changes, matrix(0, nrow = length(missingTxps), ncol = ncol(fold_changes),
                                                dimnames = list(missingTxps, colnames(fold_changes))))
@@ -69,6 +69,29 @@ stats <- mapply(function(x,z) {
 }, trueDetNodes, simDetNodes)
 print(stats)
 ```
+
+#### Comparing deseq2 run on leaves only
+```{r}
+load("environment/resDeseq2_sim.RData")
+load("environment/resDeseq2_true.RData")
+deseqT <- sapply(c(0.01, 0.05, 0.1), function(p) which(resTrue$padj <= p))
+deseqS <- sapply(c(0.01, 0.05, 0.1), function(p) which(res$padj <= p))
+
+### With truth being defined by DESeq2
+stats <- mapply(function(x,z) {
+    computeTPFP(x, z, y, logFCNodes, tree, type="leaves")
+}, deseqT, deseqS)
+print(stats)
+
+### With Actual truth
+stats <- sapply(deseqS, function(x) computeTPFP(trueCountNodes, x, y, logFCNodes, tree, type = "leaves"))
+print(stats)
+
+### Comparind deseq2 truth with actual truth
+stats <- sapply(deseqT, function(x) computeTPFP(trueCountNodes, x, y, logFCNodes, tree, type = "leaves"))
+print(stats)
+```
+BOTH FDR and TPR are lower than BOUTH, the same is observed when comparing with the ground truth.
 
 #### Truth being defined on true data and using leaves
 Here the ground truth is the actual true Nodes, where a node(inner or leaf) is called differentially expressed when the logFC is > 0.066. We compare with the ground truth both the bouth results on the simulated and true data

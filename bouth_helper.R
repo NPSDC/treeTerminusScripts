@@ -46,20 +46,12 @@ computeTPFP <- function(tSig, sSig, y, logFC, tree = NULL, type = "all", pTab = 
     {
         if(is.null(tree))
             stop("Tree cannot be null")
-        
-        tSigL <- tSig[tSig %in% seq(nrow(y))]
-        sSigL <- sSig[sSig %in% seq(nrow(y))]    
-        
-        innNodes <- tSig[tSig > nrow(y)]
-        tSig <- unlist(Descendants(tree, innNodes, type = "tips"))
-        innNodes <- sSig[sSig > nrow(y)]
-        sSig <- unlist(Descendants(tree, innNodes, type = "tips"))
-        
-        tSig <- union(tSigL, tSig)
-        sSig <- union(sSigL, sSig)
+        tSig <- unique(unlist(Descendants(tree, tSig, type = "tips")))
+        sSig <- unique(unlist(Descendants(tree, sSig, type = "tips")))
         truth <- getTruth(nrow(y), tSig)
         simTruth <- getTruth(nrow(y), sSig)
     }
+    
     tab <- table(simTruth, truth)
     tpr <- tab[2,2]/colSums(tab)[2]
     fdr <- tab[2,1]/rowSums(tab)[2]

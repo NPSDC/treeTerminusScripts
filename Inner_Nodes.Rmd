@@ -1,0 +1,188 @@
+---
+title: "Inner Nodes"
+output: html_notebook
+---
+
+```{r}
+source("tree_helper_function.R")
+source("bouth_helper.R")
+load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
+load("environment/se_swim.RData")
+load("environment/ygroup.RData")
+load("environment/bouth_true.RData")
+load("environment/bouth_sim.RData")
+load("environment/treeDfGroup.RData")
+load("environment/tree_group.RData")
+library(ggplot2)
+```
+
+
+#### Modifying the true counts matrices
+```{r}
+missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+print(length(missingTxps))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[rownames(y),] ###Arranging in the manner of y
+
+innNodes <- nrow(y)+1:tree$Nnode
+aggCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), sim.counts.mat)
+fold_changes <- rbind(fold_changes, matrix(0, nrow = length(missingTxps), ncol = ncol(fold_changes),
+                                               dimnames = list(missingTxps, colnames(fold_changes))))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1])) 
+fold_changes <- fold_changes[rownames(y),]
+
+trueCountNodes <- which(abs(logFCNodes) >= 0.066) ##Making sure root is non differentiated
+trueLeaves <- union(trueCountNodes[trueCountNodes <= nrow(y)],unlist(Descendants(tree,trueCountNodes[trueCountNodes > nrow(y)])))
+
+trueDetNodes <- sapply(bouth_true, function(b) extractBouthNodes(b, y))
+simDetNodes <- sapply(bouth_sim, function(b) extractBouthNodes(b, y))
+
+aggSimCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), assays(y)[["counts"]], list(c(1:6),c(7:12)))
+logFCSimNodes <- ifelse(rowSums(aggSimCountsNodes)==0, 0, log2(aggSimCountsNodes[,2]/aggSimCountsNodes[,1])) 
+
+###Used in swish paper 
+# iso.any <- iso.dtu | iso.dte | iso.dge
+```
+
+### Exploring the inner driver nodes
+
+
+#### Looking at the distribution within nodes
+```{r}
+driverInn <- simDetNodes[["0.05"]][simDetNodes[["0.05"]] %in% innNodes] ##Inner driver nodes
+leaves <- Descendants(tree, driverInn, "tips")
+dLengths <- sapply(leaves, length)
+hist(dLengths)
+
+detNodes <- extractBouthNodes(bouth_sim[["0.05"]],se,"detected") ##Detected nodes
+lNotDeg <- list()
+for(i in seq_along(leaves)) {
+    lNotDeg[[i]] <- setdiff(leaves[[i]], detNodes)
+}
+
+nInds <- which(sapply(lNotDeg, length) != 0)
+print(hist(sapply(lNotDeg,length)[nInds]))
+print(length(nInds))
+
+b <- bouth_sim[["0.05"]]
+notDetNodes <- b$results.by.node[match(rownames(y)[unlist(lNotDeg)], b$results.by.node$LEAF),]
+plot(log10(notDetNodes[["pvalue"]]), logFCSimNodes[unlist(lNotDeg)]) + abline(v=log10(0.05))
+print(mean(abs(logFCSimNodes[unlist(lNotDeg)]) > 1))
+```
+76 driver nodes that have atleast 1 leaf that is not differentially expressed. Further, while most of these nodes have 1 txp as non-deg, some have as many as 7 such txps. Around 70% leaves that have not been detected have logFC larger than 1
+
+#### Exploratory analysis on the type of inner nodes
+```{r}
+tNodes <-  Descendants(tree, nrow(y)+1, type="c")##Children of root aka all the indivudal tree groups
+diffTNodes <- intersect(tNodes, driverInn) ## Tree groups that are differentially expressed
+print(length(diffTNodes))
+othDiffNodes <- setdiff(driverInn, diffTNodes) ## Differentially expressed inner nodes, that are not roots of individual tree groups
+print(length(othDiffNodes))
+
+hist(dLengths[match(diffTNodes,driverInn)]) ## Leave nodes for the actual root
+hist(dLengths[match(othDiffNodes,driverInn)]) ## Leave nodes for the inner nodes
+
+distRoot <- sapply(Ancestors(tree, othDiffNodes), length) - 1 ## Distance from the root of the tree group for each indivudal node
+hist(distRoot)
+```
+Of the 461 differentially expressed inner nodes, 263 nodes belong to the tree groups, 198 nodes are broken earlier. Of these 198 nodes while most are just located at a distance 1, many are located at a distance of 2 or greater than 2
+
+#### Change in TPR,FPR as we go one level above or below
+```{r}
+### Going one level below
+dn <- Descendants(tree, driverInn, type = "children")
+lowerLevel <- sapply(dn, function(x) ifelse(length(x) > 1, sample(x,1), x))
+sNodes <- union(intersect(simDetNodes[["0.05"]], seq(nrow(y))), lowerLevel)
+print(unlist(computeTPFP(trueDetNodes[["0.05"]], sNodes, y, logFCNodes, tree, type = "leaves"))) ### At leaf level
+print(unlist(computeTPFP(trueDetNodes[["0.05"]], sNodes, y, logFCNodes, tree))) ### At node level
+print(unlist(computeTPFP(trueCountNodes, sNodes, y, logFCNodes, tree, type = "leaves")))
+
+### Going one level above
+upLevel <- union(diffTNodes,Ancestors(tree, othDiffNodes, type = "parent")) 
+print(length(upLevel)) ##Number of nodes decreases
+sNodes <- union(upLevel, intersect(simDetNodes[["0.05"]], seq(nrow(y))))
+print(unlist(computeTPFP(trueDetNodes[["0.05"]], sNodes, y, logFCNodes, tree, type = "leaves")))
+print(unlist(computeTPFP(trueDetNodes[["0.05"]], sNodes, y, logFCNodes, tree)))
+print(unlist(computeTPFP(trueCountNodes, sNodes, y, logFCNodes, tree, type = "leaves")))
+```
+We want to check this but ideally the method itself should take care of it. At the node level, FDR increases and TPR decreases either going up or down. Looking at the leaves, at the lower level while the FDR decreases, there is a considerable decrease in TPR as well. Similarly, at increasing the level, both TPR and FDR increase with the latter being much more significant.
+
+When comparing with the **actual truth**, I observe a both decrease in TPR and increase in FDR at a lower level
+However on **increasing** the level, while both FDR and TPR increase, the increase in latter is significant
+
+#### Looking at the nodes that have txps with varying signs of effect size
+```{r}
+lInds <- c()
+for(i in seq_along(leaves)) {
+    lp <- 0
+    ln <- 0
+    
+    if(sum(logFCSimNodes[leaves[[i]]] > 0))
+        lp <- 1
+    if(sum(logFCSimNodes[leaves[[i]]] < 0))
+        ln <- -1
+    if(lp*ln == -1)
+        lInds <- c(lInds, driverInn[i])
+}
+hist(logFCSimNodes[driverInn]) ## All Inner Nodes
+hist(logFCSimNodes[lInds]) ## All inner nodes that have atleast txps with varying signs of logFCs
+print(mean(abs(logFCSimNodes[driverInn]) <= 0.5))
+print(mean(abs(logFCSimNodes[lInds]) <= 0.5))
+
+```
+Most of the driver nodes have only two underlying txps. Further, around 24% nodes have logFC < 0.5 which increases to 0.73 for nodes containing txps with varying signs. 
+
+#### Looking at these nodes further sortring by inFRV
+```{r}
+mInds <- match(lInds, driverInn)
+y <- computeInfRV(y)
+infs <- sapply(mInds, function(x) sum(mcols(y)[leaves[[x]],"meanInfRV"]))
+infInds <- order(infs, decreasing = T)
+head(infs[infInds])
+tail(infs[infInds])
+
+i=1
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="((((((1,2),3),4),5),(((6,7),8),9)),(10,11));")
+plot(t)
+
+i=2
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="(1,(2,3));") ###Not connected to root
+plot(t)
+
+i=3
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+
+i=5
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="((1,2),(3,4));")
+plot(t)
+
+i=7
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+
+i=8
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="((1,2),3);")
+plot(t)
+
+i=9
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="((1,2),3);")
+plot(t)
+
+i=18
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="(((1,(2,3)),(4,(5,6))),7);")
+plot(t)
+
+i=20
+print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
+t=read.tree(text="(((1,(2,3)),4),5);")
+plot(t)
+```
+
+All the nodes having the least infRV have only 2 leaves. This might me also useful with nodes having leaves with same signs.
+Count based aggregation might make us lose many such nodes where children have significant logFCs with opposite signs. Do we still consider these as driver nodes? Further, nodes with very opposing fold changes getting merged is sligthly conufsing
