@@ -31,7 +31,7 @@ getTruth <- function(n, trueInds)
 }
 
 ### type in c(all, leaves)
-computeTPFP <- function(tSig, sSig, y, logFC, tree = NULL, type = "all", pTab = F)
+computeTPFP <- function(tSig, sSig, y, logFC = NULL, tree = NULL, type = "all", pTab = F)
 {
     # nodeDf <- bouth_ob$tree@node
     # nodeDf$id[nodeDf$id=="Root"] <- as.character(nrow(y)+1)

@@ -1,0 +1,137 @@
+---
+title: "Visualising inferential variance"
+author: "Noor Pratap Singh"
+date: "6/11/2021"
+output: html_document
+---
+
+#### Loading data
+```{r}
+library(fishpond)
+library(DESeq2)
+library(ggplot2)
+library(ape)
+load("environment/innNodes/ySwish.RData")
+load("environment/ygroup.RData")
+load("environment/innNodes/dds.RData")
+load("environment/tree_group.RData")
+
+yAll <- computeInfRV(yAll)
+infRVs <- mcols(yAll)[,"meanInfRV"]
+infCuts <- cut_number(infRVs, 6)
+
+sum(rownames(yAll) != rownames(dds)) == 0
+
+#### Levels defined from leaf
+levelsLeaf <- node.depth(tree, 2)
+levelsLeaf <- sapply(levelsLeaf, function(x) {
+    if(x <= 4)
+        as.character(x)
+    else
+        "5"
+    
+})
+print(table(levelsLeaf))
+
+levelsRoot <- rep("6", nrow(yAll))
+for(i in seq(ncol(treeDfGroup)))
+{
+    if(i != ncol(treeDfGroup))
+    {
+        nodes <- treeDfGroup[,i]
+        nodes <- as.numeric(nodes[nodes!="Undefined"])
+        if(i==1)
+            levelsRoot[nrow(y)+1] = "2"
+        else
+        {
+            if(sum(is.na(nodes)) != 0)
+                stop("nodes cant be non numeric")
+            if(i <= 4)
+                levelsRoot[nodes] = as.character(i)
+            else
+                levelsRoot[nodes] = '5'
+        }    
+    }
+}
+print(table(levelsRoot))
+
+df <- data.frame(disp = mcols(dds)$dispGeneEst, mean = mcols(dds)$baseMean, infRV = infRVs, levelInfs = infCuts, levelLeaf = levelsLeaf, levelRoot = levelsRoot)
+```
+
+#### All Nodes
+```{r out.width="100%"}
+#### Disp with infRVs
+pDispInf <- ggplot(df, aes(x=infRV, y = disp)) + geom_point(alpha = 0.3, size = 0.4) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispInf)
+
+#### Dispersion versus mean
+pDispMeanOverAll <- ggplot(df, aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanOverAll)
+
+#### Dispersion versus mean stratified by inferntial variance
+pDispMeanStrat <- ggplot(df, aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) + facet_wrap(~levelInfs) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanStrat)
+
+#### Dispersion versus mean stratified by levels from root
+pDispMeanRootStrat <- ggplot(df, aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) + facet_wrap(~levelRoot) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanRootStrat)
+
+#### Dispersion versus mean stratified by levels from leaf
+pDispMeanLeafStrat <- ggplot(df, aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) + facet_wrap(~levelLeaf) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanLeafStrat)
+```
+
+
+#### Only Transcripts
+```{r out.width="100%", out.width="100%"}
+#### Disp with infRVs
+pDispInf <- ggplot(df[1:nrow(y),], aes(x=infRV, y = disp)) + geom_point(alpha = 0.3, size = 0.4) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispInf)
+
+#### Dispersion versus mean
+pDispMeanOverAll <- ggplot(df[1:nrow(y),], aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanOverAll)
+
+#### Dispersion versus mean stratified by inferntial variance
+pDispMeanStrat <- ggplot(df[1:nrow(y),], aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) + facet_wrap(~levelInfs) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanStrat)
+
+```
+
+#### Only Inner Nodes
+```{r out.width="100%"}
+#### Disp with infRVs
+pDispInf <- ggplot(df[(nrow(y)+1):nrow(yAll),], aes(x=infRV, y = disp)) + geom_point(alpha = 0.3, size = 0.4) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispInf)
+
+#### Dispersion versus mean
+pDispMeanOverAll <- ggplot(df[(nrow(y)+1):nrow(yAll),], aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanOverAll)
+
+#### Dispersion versus mean stratified by inferntial variance
+pDispMeanStrat <- ggplot(df[(nrow(y)+1):nrow(yAll),], aes(x=mean, y = disp)) + geom_point(alpha = 0.3, size = 0.4) + facet_wrap(~levelInfs) +
+    scale_x_continuous(trans = "log2") +
+    scale_y_continuous(trans = "log2")
+print(pDispMeanStrat)
+```
+

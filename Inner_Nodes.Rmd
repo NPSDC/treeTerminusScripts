@@ -178,9 +178,9 @@ print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
 t=read.tree(text="(((1,(2,3)),(4,(5,6))),7);")
 plot(t)
 
-i=20
+i=25
 print(logFCSimNodes[leaves[[mInds[infInds][i]]]])
-t=read.tree(text="(((1,(2,3)),4),5);")
+t=read.tree(text="((((1,2),3),4), (5,(6,7)));")
 plot(t)
 ```
 

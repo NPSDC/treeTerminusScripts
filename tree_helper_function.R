@@ -5,6 +5,8 @@ library(phangorn)
 library(fishpond)
 library(SummarizedExperiment)
 library(TreeSummarizedExperiment)
+library(parallel)
+library(DESeq2)
 
 ## Given a tree of phylo, convert it into a data frame needed by BOUTH or treeRowData
 getTreeDf <- function(tree) {
@@ -116,6 +118,66 @@ createTreeSummarizedObject <- function(ySe, rTreeDf, rTree) {
 }
 
 ## For a given node/s compute the aggreated sum across the leaves and then take the average across the replicates for each condition
+## Will return matrix, with leaves first followed by inner nodes
+computeAggNodesU <- function(tree, nodeID, se_counts, group_inds = NULL) {
+    performRowAgg <- function(counts, col_inds = NULL) {
+        if(is.null(dim(counts)))
+            stop("counts has to be matrix/dataframe")
+        if(is.null(rownames(counts)))
+            stop("rows must be named")
+        
+        if(is.null(col_inds))
+            return(counts)
+        
+        else
+        {
+            
+            df <- matrix(0, nrow = nrow(counts), ncol = length(col_inds), dimnames = list(rownames(counts)))
+            for(i in seq_along(col_inds))
+                df[,i] = rowMeans(counts[,col_inds[[i]]])
+            return(df)
+        }
+    }
+    performColAgg <- function(counts, row_inds = NULL)
+    {
+        if(is.null(dim(counts)))
+            stop("counts has to be matrix/dataframe")
+        if(is.null(row_inds))
+            return(counts)
+        if(is.null(names(row_inds)))
+            stop("row indexes must be named")
+        df <- matrix(0, nrow = length(row_inds), ncol = ncol(counts))
+        for(i in seq_along(row_inds))
+            df[i,] <- colSums(counts[row_inds[[i]],])
+        rownames(df) <- names(row_inds)
+        return(df)
+    }
+    
+    if(!is.numeric(nodeID))
+    {
+        nodeID <- as.numeric(nodeID)
+        if(sum(is.na(nodeID)) > 0)
+            stop("Node ids contain a non numeric")
+    }
+    
+    mat <- matrix(0, nrow=0, ncol=ncol(se_counts))
+    
+    leaves <- which(nodeID <= nrow(se_counts))
+    innNodes <- which(nodeID > nrow(se_counts))
+    
+    lInds <- Descendants(tree, nodeID[innNodes], type = "tips")
+    names(lInds) <- as.character(nodeID[innNodes])
+    ls <- sapply(lInds, length)
+    
+    if(length(leaves) > 0)
+        mat <- rbind(mat, performColAgg(se_counts[nodeID[leaves],]))
+    if(length(innNodes) > 0)
+        mat <- rbind(mat, performColAgg(se_counts, lInds))
+    mat <- performRowAgg(mat, group_inds)       
+  
+    return(mat)
+}
+
 computeAggNodes <- function(tree, nodeID, se_counts, group_inds = list(c(1),c(2))) {
     performColAgg <- function(counts, group_inds) {
         if(!is.null(dim(counts)))
@@ -145,3 +207,80 @@ computeAggNodes <- function(tree, nodeID, se_counts, group_inds = list(c(1),c(2)
     return(df)
 }
 
+prepSwish <- function(tree, seObLeaves) 
+{
+    innNodes <- nrow(seObLeaves)+1:tree$Nnode
+    asList <- vector(mode = "list", length(assays(seObLeaves)))
+    #asList <- vector(mode = "list", 5)
+    names(asList) <- assayNames(seObLeaves)
+    for(n in names(asList))
+        asList[[n]] <- computeAggNodesU(tree, c(1:nrow(seObLeaves),innNodes), assays(seObLeaves)[[n]])
+    #rData <- rowData(swishObLeaves)
+    
+    y <- SummarizedExperiment(assays = asList, colData = colData(seObLeaves), metadata = metadata(seObLeaves))
+    metadata(y)$infRepsScaled=F
+    y
+}
+
+library(data.table)
+createDESeq2Ob <- function(indsIV, aggCounts, y, cores=6)
+{
+  if(length(unlist(indsIV)) != nrow(aggCounts) | any(duplicated(unlist(indsIV))))
+    stop("all indexes not covered")
+  ddsL <- mclapply(indsIV, function(inds) {
+    d <- DESeqDataSetFromMatrix(countData = round(aggSimCountsNodes[inds,]),
+                                colData = colData(y),
+                                design = ~ condition)
+    d <- DESeq(d, minReplicatesForReplace=Inf)
+  }, mc.cores = cores)
+  names(ddsL) <- names(indsIV)
+  
+  resL <- mclapply(seq_along(indsIV), function(i) {
+    res <- results(ddsL[[i]], name="condition_2_vs_1", independentFilter = F, cooksCutoff = Inf)
+    res$node <- indsIV[[i]]
+    as.data.frame(res)
+  }, mc.cores = cores)
+  resL <- as.data.frame(rbindlist(resL))
+  resL <- resL[order(resL$node),]
+  rownames(resL) <- rownames(aggCounts)
+  return(list("dds"=ddsL,"res"=resL))
+}
+
+createSwishOb <- function(indsIV, y, cores=6) {
+  yAll <- prepSwish(tree, y)
+  yAll <- scaleInfReps(yAll, lengthCorrect = T)
+  yAll <- labelKeep(yAll)
+  mcols(yAll)$keep=T
+  yL <- mclapply(indsIV, function(inds)
+    {
+    swish(yAll[inds,], x = "condition")
+  }, mc.cores = cores)
+  names(yL) <- names(indsIV)
+  
+  sR <- mclapply(seq(indsIV), function(i)
+    {
+    swishRes <- data.frame(mcols(yL[[i]]))
+    swishRes$node <- indsIV[[i]]
+    swishRes <- swishRes[,-c(2)] ### Removing keep
+  }, mc.cores = cores)
+  sR <- as.data.frame(rbindlist(sR))
+  sR <- sR[order(sR$node),]
+  rownames(sR) <- rownames(yAll)
+  return(list("yL"=yL, "df"=sR))
+}
+
+createCand <- function(tree, resL, cores = cores, type = "deseq2")
+{
+  logFC <- "log2FoldChange"
+  if(type=="swish")
+    logFC <- "log2FC"
+  candDeseqL <- mclapply(resL, function(res) {
+                        getCand(tree,
+                        score_data = res,
+                        node_column = "node",
+                        p_column = "pvalue",
+                        sign_column = logFC,
+                        message=T)
+    }, mc.cores = cores)
+  return(candDeseqL)
+}
