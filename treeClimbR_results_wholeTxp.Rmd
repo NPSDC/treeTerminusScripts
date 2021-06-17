@@ -1,5 +1,5 @@
 ---
-title: "treeClimbR Results"
+title: "treeClimbR Results on whole txp"
 author: "Noor Pratap Singh"
 date: "6/14/2021"
 output: html_document
@@ -9,8 +9,8 @@ output: html_document
 suppressPackageStartupMessages(source("tree_helper_function.R"))
 library(phangorn)
 load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
-load("environment/ygroup.RData")
-load("environment/tree_group.RData")
+load("environment/whole_txp/swish_y.RData")
+load("environment/whole_txp/tree.RData")
 missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
 sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
                                                dimnames = list(missingTxps, colnames(sim.counts.mat))))
@@ -35,11 +35,12 @@ print(length(tLeaf))
 
 ##### Taking driver node leaves as true txps
 ```{r}
-load("environment/parTClimbR/bSwish.RData")
+load("environment/whole_txp/bSwish.RData")
 detNodes <- sapply(bSwish, function(sw) sw$output[sw$output$signal.node, "node"])
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
 print(stats)
 ```
+
 ##### Taking driver node as ground truth aka node level
 ```{r}
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, logFCNodes, tree, type="all"))
@@ -56,7 +57,7 @@ print(stats)
 
 ##### Taking driver node leaves as true txps
 ```{r}
-load("environment/parTClimbR/bSwishInfRV.RData")
+load("environment/whole_txp/bSwishInfRV.RData")
 detNodes <- sapply(bSwishInf, function(sw) sw$output[sw$output$signal.node, "node"])
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
 print(stats)
@@ -80,7 +81,7 @@ print(stats)
 
 ##### Taking driver node leaves as true txps
 ```{r}
-load("environment/innNodes/ySwish.RData")
+load("environment/whole_txp/ySwishAllNodes.RData")
 detNodes <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(y)[,"qvalue"] <= x))
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, pTab=F, type="leaf"))
 print(stats)
@@ -103,7 +104,7 @@ print(stats)
 
 ##### Taking driver node leaves as true txps
 ```{r}
-load("environment/parTClimbR/bDESeq2.RData")
+load("environment/whole_txp/bDESeq2.RData")
 detNodes <- sapply(bDeseq2, function(de) de$output[de$output$signal.node, "node"])
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
 print(stats)
@@ -126,7 +127,7 @@ print(stats)
 
 ##### Taking driver node leaves as true txps
 ```{r}
-load("environment/parTClimbR/b_deseq2_infRV.RData")
+load("environment/whole_txp/b_deseq2_infRV.RData")
 detNodes <- sapply(bDeseq2Inf, function(de) de$output[de$output$signal.node, "node"])
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, pTab=T, type="leaf"))
 print(stats)
@@ -146,7 +147,7 @@ print(stats)
 
 #### Deseq2 on leaves
 ```{r}
-load("environment/innNodes/res.RData")
+load("environment/whole_txp/res.RData")
 detNodes <- lapply(c(0.01,0.05,0.1), function(x) which(res$padj[1:nrow(y)] <= x))
 stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
 print(stats)
