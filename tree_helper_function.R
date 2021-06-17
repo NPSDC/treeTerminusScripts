@@ -55,12 +55,13 @@ runSwishtree <- function(tree, ySwish, type) {
     mcols(ySwish)[,'keep'] <- TRUE
     set.seed(1)
     ySwish <- swish(ySwish, x="condition")
+    ySwish <- computeInfRV(ySwish)
     return(ySwish)
 }
 
-## Given the updated swim seObject, update the indexes of tree that correspond to those indexes and also add the remaining leaf nodes 
-mergeLeaves <- function(tree, ySwish, se) {
-    #seInds <- match(rownames(ySwish), rownames(se))
+## Given the seObject, create leaves for the txps in seObject missing in the tree and then arrange the rows of seObject in the order of leaves of the trees
+## (for the index version refer previous commit on github)
+mergeLeaves <- function(tree, ySwish) {
     missing_txps <- setdiff(rownames(ySwish), tree$tip.label)
     if(length(missing_txps) > 0)
     {
@@ -71,13 +72,8 @@ mergeLeaves <- function(tree, ySwish, se) {
         nwk <- paste("(", remLeaves, ",", nwk, ");", sep = "")
         tree <- read.tree(text = nwk)
     }
-    #l <- length(setdiff(seInds, as.numeric(tree$tip.label)))
-    # if(l != 0)
-    #     stop(paste("Indexes do not match", l))
-    
-    # if(!is.null(se))
-    #     tree <- convTree(tree, ySwish, se)
-    return(tree)
+    ySwish <- ySwish[tree$tip.label,]
+    return(list("tree" = tree, "ySwish" = ySwish))
 }
 
 ### Arrange indices in the order of the tree that has been specified in the updated SE
@@ -263,6 +259,7 @@ createSwishOb <- function(indsIV, y, cores=6) {
     swishRes$node <- indsIV[[i]]
     swishRes <- swishRes[,-c(2)] ### Removing keep
   }, mc.cores = cores)
+  gc()
   sR <- as.data.frame(rbindlist(sR))
   sR <- sR[order(sR$node),]
   rownames(sR) <- rownames(yAll)
@@ -282,5 +279,67 @@ createCand <- function(tree, resL, cores = cores, type = "deseq2")
                         sign_column = logFC,
                         message=T)
     }, mc.cores = cores)
+  gc()
   return(candDeseqL)
+}
+
+getTruth <- function(n, trueInds)
+{
+  truth <- rep(0,n)
+  truth[trueInds] <- 1
+  as.factor(truth)
+}
+
+### type in c(all, leaves)
+computeTPFP <- function(tSig, sSig, y, logFC = NULL, tree = NULL, type = "all", pTab = F)
+{
+  # nodeDf <- bouth_ob$tree@node
+  # nodeDf$id[nodeDf$id=="Root"] <- as.character(nrow(y)+1)
+  # inds <- match(nodeDf$id, as.character(seq_along(logFC)))
+  # pvalues <- bouth_ob$tree@test$pvalue[inds]
+    if(type == "all")
+    {
+      truth <- getTruth(length(logFC), tSig)
+      simTruth <- getTruth(length(logFC), sSig)    
+    }
+    else 
+    {
+      if(is.null(tree))
+        stop("Tree cannot be null")
+      tSig <- unique(unlist(Descendants(tree, tSig, type = "tips")))
+      sSig <- unique(unlist(Descendants(tree, sSig, type = "tips")))
+      truth <- getTruth(nrow(y), tSig)
+      simTruth <- getTruth(nrow(y), sSig)
+    }
+    
+    tab <- table(simTruth, truth)
+    tpr <- tab[2,2]/colSums(tab)[2]
+    fdr <- tab[2,1]/rowSums(tab)[2]
+    if(pTab)
+      print(tab)
+    list(fdr=fdr, tpr=tpr)
+}
+
+findDriverGround <- function(detNodes, tree, logFCs)
+{
+    nLeaves <- length(tree$tip.label)
+    detNodes <- sort(detNodes)
+    innNodes <- detNodes[detNodes > nLeaves]
+    notDriver <- c()
+    driver <- c()
+    detNodes <- c(innNodes, detNodes[detNodes <= nLeaves])
+    desc <- Descendants(tree, detNodes, type = "tips")
+    
+    for(i in seq_along(detNodes))
+    {
+        if(detNodes[i] %in% notDriver)
+          next()
+        fcs <- logFCs[desc[[i]]]
+        if(sum(fcs > 0) > 0 & sum(fcs < 0) > 0) {
+          next()
+        }
+        notDriver <- c(notDriver, unlist(Descendants(tree, detNodes[i], "all")))
+        driver <- c(driver, detNodes[i])
+    }
+    return(list(driver, notDriver))
 }
