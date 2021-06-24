@@ -1,5 +1,5 @@
 ---
-title: "treeClimbR Results on whole txp"
+title: "treeClimbR Results"
 author: "Noor Pratap Singh"
 date: "6/14/2021"
 output: html_document
@@ -26,138 +26,75 @@ fold_changes <- fold_changes[rownames(y),]
 
 trueCountNodes <- which(abs(logFCNodes) >= 0.066) ##Making sure root is non differentiated
 trueDriverNodes <-  findDriverGround(trueCountNodes, tree, logFCNodes)[[1]] ### All underlying children have same sign
-tLeaf <- which(abs(logFCNodes)[1:nrow(y)] >= 0.066)
+
+iso.any <- iso.dtu | iso.dte | iso.dge
+tLeaf <- which(rownames(y) %in% names(iso.dtu)[iso.any])
 print(length(trueDriverNodes))
 print(length(tLeaf))
 ```
 
-#### Swish treeClimbR no stratification
-
-##### Taking driver node leaves as true txps
+#### Extracting detected nodes
 ```{r}
 load("environment/whole_txp/bSwish.RData")
-detNodes <- sapply(bSwish, function(sw) sw$output[sw$output$signal.node, "node"])
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-```
-
-##### Taking driver node as ground truth aka node level
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, logFCNodes, tree, type="all"))
-print(stats)
-```
-
-##### Taking only txps with fold change > 0.066
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-```
-
-#### Swish treeClimbR stratification with infRV
-
-##### Taking driver node leaves as true txps
-```{r}
-load("environment/whole_txp/bSwishInfRV.RData")
-detNodes <- sapply(bSwishInf, function(sw) sw$output[sw$output$signal.node, "node"])
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-```
-
-##### Taking driver node as ground truth aka node level
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, logFCNodes, tree, type="all"))
-print(stats)
-```
-
-##### Taking only txps with fold change > 0.066
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-```
-
-
-
-#### Swish on leaves
-
-##### Taking driver node leaves as true txps
-```{r}
-load("environment/whole_txp/ySwishAllNodes.RData")
-detNodes <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(y)[,"qvalue"] <= x))
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, pTab=F, type="leaf"))
-print(stats)
-```
-
-##### Taking only txps with fold change > 0.066
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, pTab=F, type="leaf"))
-print(stats)
-```
-
-#### Swish on nodes
-```{r}
-detNodes <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(yAll)[,"qvalue"] <= x))
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, yAll, logFCNodes, tree, pTab=F, type="all"))
-print(stats)
-```
-
-#### Deseq2 on All
-
-##### Taking driver node leaves as true txps
-```{r}
+load("environment/whole_txp/bSwishInfRV.RData") 
+load("environment/whole_txp/b_deseq2_infRV.RData") 
 load("environment/whole_txp/bDESeq2.RData")
-detNodes <- sapply(bDeseq2, function(de) de$output[de$output$signal.node, "node"])
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
-print(stats)
+load("environment/whole_txp/ySwishAllNodes.RData")
+load("environment/innNodes/res.RData")
+
+detNodes <- list()
+detNodes[["OnlySwishL"]] <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(y)[,"qvalue"] <= x)) ##Leaves
+detNodes[["tcrSw"]] <- sapply(bSwish, function(sw) sw$output[sw$output$signal.node, "node"]) ##Treeclimbr Swish on all nodes
+detNodes[["tcrSwInf"]] <- sapply(bSwishInf, function(sw) sw$output[sw$output$signal.node, "node"]) ##Treeclimbr Swish on nodes stratified by infrv (6 bins)
+detNodes[["tcrDeseq2"]] <- sapply(bDeseq2, function(de) de$output[de$output$signal.node, "node"]) ##Treeclimbr deseq2 nodes
+detNodes[["tcrDeInf"]] <- sapply(bDeseq2Inf, function(de) de$output[de$output$signal.node, "node"]) ##Treeclimbr deseq2 on nodes stratified by infrv (6 bins)
+
+# detNodesDeN <- lapply(c(0.01,0.05,0.1), function(x) which(res$padj <= x))
+# detNodes[["OnlySwishN"]] <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(yAll)[,"qvalue"] <= x)) ##On nodes
 ```
 
-##### Taking driver node as ground truth aka node level
+#### Comparing with leaf nodes
 ```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, logFCNodes, tree, type="all"))
-print(stats)
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(detNodes))
+{
+    stats <-  sapply(detNodes[[i]], function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(names(detNodes)[i],2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+### tcr treeClimbR
 ```
 
-##### Taking only txps with fold change > 0.066
+##### treeclimbR using different bins for stratifying based on infRV
 ```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
-print(stats)
+load("environment/whole_txp/b_swish_infRV_diff.RData")
+bins <- as.character(c(4,6,8,12,16))
+detNodesInfBins <- vector("list", length(bins))
+names(detNodesInfBins) <- bins
+
+dfInf <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(detNodesInfBins))
+{
+    detNodesInfBins[[bins[i]]] <- sapply(bSwishInf[[i]], function(sw) sw$output[sw$output$signal.node, "node"])
+    stats <-  sapply(detNodesInfBins[[bins[i]]], function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
+    colnames(stats) <- colnames(dfInf)[c(3:5)]
+    stats <- cbind(Method=rep(bins[i],2), Metric = c("FDR", "TPR"), stats)
+    dfInf <- rbind(dfInf, stats)
+    
+}
+print(dfInf)
 ```
 
-
-#### Deseq2 on nodes stratified by infRV
-
-##### Taking driver node leaves as true txps
+##### treeclimbR using levels for stratification
 ```{r}
-load("environment/whole_txp/b_deseq2_infRV.RData")
-detNodes <- sapply(bDeseq2Inf, function(de) de$output[de$output$signal.node, "node"])
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, pTab=T, type="leaf"))
+load("environment/whole_txp/b_swish_levels.RData")
+detLevels <- sapply(bSwishLev, function(sw) sw$output[sw$output$signal.node, "node"])
+stats <-  sapply(detLevels, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
 print(stats)
 ```
 
-##### Taking driver node as ground truth aka node level
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, logFCNodes, tree, type="all"))
-print(stats)
-```
+Tree level methods in general seem to have much higher FDR just swish but also a good TPR. DESeq2 has the highest TPR and at 0.1 level, FDR is also comparable to Swish. As expected cut number 4 seems optimal when chosing bins for stratification. Level based has the lowest FDR.
 
-##### Taking only txps with fold change > 0.066
-```{r}
-stats <-  sapply(detNodes, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-```
-
-#### Deseq2 on leaves
-```{r}
-load("environment/whole_txp/res.RData")
-detNodes <- lapply(c(0.01,0.05,0.1), function(x) which(res$padj[1:nrow(y)] <= x))
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-stats <-  sapply(detNodes, function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
-print(stats)
-```
-
-#### Deseq2 on nodes
-```{r}
-detNodes <- lapply(c(0.01,0.05,0.1), function(x) which(res$padj <= x))
-stats <-  sapply(detNodes, function(nodes) computeTPFP(trueDriverNodes, nodes, res, logFCNodes, tree, pTab=F, type="all"))
-print(stats)
-```
+One side note is that when using the whole transcriptome as a reference, we are not actually making use of the tree structure completely since around 33K (57%) have root as their parent. So, do we expect tree based method to account for these as well.

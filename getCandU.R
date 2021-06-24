@@ -1,6 +1,7 @@
 library(phangorn)
 library(foreach)
 library(doParallel)
+
 getCandU <- function(tree, t = NULL,
                     score_data, node_column,
                     p_column, sign_column,
@@ -67,6 +68,7 @@ getCandU <- function(tree, t = NULL,
         # For an internal node, if more than half of its direct child nodes has
         # NA score, it would not be picked.
         name_q <- paste0("q_", t[i])
+        #chl_I <- share(chl_I)
         sel_0 <- mclapply(chl_I, FUN = function(x){
             xx <- match(x, node_col)
             qx <- score_data[[name_q]][xx]
@@ -80,7 +82,7 @@ getCandU <- function(tree, t = NULL,
         # equals 1 or -1, pick the node
         br_I <- findDescendant(tree = tree, node = node_0, only.leaf = FALSE,
                                self.include = TRUE, use.alias = TRUE)
-        
+        #br_I <- share(br_I)
         sel_1 <- mclapply(br_I, FUN = function(x){
             xx <- match(x, node_col)
             qx <- score_data[[name_q]][xx]
@@ -137,6 +139,7 @@ getCandU <- function(tree, t = NULL,
     ww <- ww[order(ww[, 1]), , drop = FALSE]
     loc_leaf <- ww[!duplicated(ww[, 1]), ]
     leaf_0 <- unique(mat[loc_leaf])
+    #leaf_0 <- share(leaf_0)
     ind_0 <- mclapply(leaf_0, FUN = function(x) {
         xx <- which(mat == x, arr.ind = TRUE)
         ux <- xx[!duplicated(xx), , drop = FALSE]
