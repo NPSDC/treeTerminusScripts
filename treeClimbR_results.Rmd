@@ -26,6 +26,7 @@ fold_changes <- fold_changes[rownames(y),]
 
 trueCountNodes <- which(abs(logFCNodes) >= 0.066) ##Making sure root is non differentiated
 trueDriverNodes <-  findDriverGround(trueCountNodes, tree, logFCNodes)[[1]] ### All underlying children have same sign
+trueDriverNodes <- sort(trueDriverNodes)
 
 iso.any <- iso.dtu | iso.dte | iso.dge
 tLeaf <- which(rownames(y) %in% names(iso.dtu)[iso.any])

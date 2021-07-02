@@ -17,6 +17,9 @@ sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), nc
 sim.counts.mat <- sim.counts.mat[rownames(y),] ###Arranging in the manner of y
 
 innNodes <- nrow(y)+1:tree$Nnode
+iso.any <- iso.dtu | iso.dte | iso.dge
+diff_txps <- rownames(fold_changes)[iso.any[rownames(fold_changes)]]
+tLeaf <- which(rownames(y) %in% diff_txps)
 
 aggCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), sim.counts.mat)
 fold_changes <- rbind(fold_changes, matrix(0, nrow = length(missingTxps), ncol = ncol(fold_changes),
@@ -27,8 +30,6 @@ fold_changes <- fold_changes[rownames(y),]
 trueCountNodes <- which(abs(logFCNodes) >= 0.066) ##Making sure root is non differentiated
 trueDriverNodes <-  findDriverGround(trueCountNodes, tree, logFCNodes)[[1]] ### All underlying children have same sign
 
-iso.any <- iso.dtu | iso.dte | iso.dge
-tLeaf <- which(rownames(y) %in% names(iso.dtu)[iso.any])
 print(length(trueDriverNodes))
 print(length(tLeaf))
 ```

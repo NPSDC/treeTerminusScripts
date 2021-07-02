@@ -343,3 +343,49 @@ findDriverGround <- function(detNodes, tree, logFCs)
     }
     return(list(driver, notDriver))
 }
+
+findDistance <- function(tree, fpNodes, trueNodes)
+{
+    Anc <- Ancestors(tree, fpNodes, "all")
+    Desc <- Descendants(tree, fpNodes, "children")
+    inds <- c()
+    for(i in seq_along(fpNodes))
+    {
+      #print(length(fpNodes))
+      aInd <- which(Anc[[i]] %in% trueNodes)
+      dInd <- sum(Desc[[i]] %in% trueNodes)
+      if(length(aInd) == 1)
+        inds <- c(inds,aInd)
+    #  if()
+      else{
+        if(dInd == 1)
+          inds <- c(inds, -1)
+        else
+        {
+          lev = -1
+          while(1) {
+            lev = lev - 1
+            desc <- unlist(Descendants(tree, Desc[[i]], "children"))
+            if(sum(desc %in% trueNodes) == 1) {
+              inds <- c(inds, lev)
+              break()
+            }
+            if(sum(desc %in% seq(length(tree$tip))) == length(desc)) {
+              print(paste(i,'1'))
+              inds <- c(inds, NA)
+              break()
+            }
+              
+          }
+        }
+      }
+      
+    }
+    return(inds)
+}
+
+###Figure out the list thing with ancestors/descendants based on the *input* being a number/vector and output being a *vector/number*
+###Check the above w.r.t NA nodes as well
+###For the above check whether my driver nodes are in actual driver nodes
+###Come up with a metrc for error (include a way to include depth and the other nodes)
+

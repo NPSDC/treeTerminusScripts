@@ -29,7 +29,7 @@ for(i in seq_along(cuts))
                           node_column = "node",
                           p_column = "pvalue",
                           sign_column = "log2FC",
-                          cores = 1)
+                          cores = 4)
     save(cSwishInf, file = "environment/whole_txp/c_swish_infRV_diff_rem.RData")
     bSwishInf[[i]] <- mclapply(c(0.01,0.05,0.1), function(x) evalCand(tree = tree, levels = cSwishInf[[i]]$candidate_list,
                                                     score_data = swishL[["df"]], node_column = "node",

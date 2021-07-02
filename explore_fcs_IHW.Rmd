@@ -1,0 +1,157 @@
+```{r}
+source("tree_helper_function.R")
+load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
+load("environment/whole_txp/swish_y.RData")
+load("environment/whole_txp/tree.RData")
+library(ggplot2)
+library(dplyr)
+
+missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[rownames(y),] ###Arranging in the manner of y
+
+innNodes <- nrow(y)+1:tree$Nnode
+aggCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), sim.counts.mat)
+fold_changes <- rbind(fold_changes, matrix(0, nrow = length(missingTxps), ncol = ncol(fold_changes),
+                                               dimnames = list(missingTxps, colnames(fold_changes))))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+fold_changes <- fold_changes[rownames(y),]
+
+levels <- node.depth(tree, 2)
+levels <- sapply(levels, function(x) {
+    if(x <= 4)
+        as.character(x)
+    else
+        "5"
+})
+levInds <- lapply(unique(levels), function(lev) which(levels == lev))
+fcDf <- data.frame(LFC = logFCNodes, levels = levels)
+```
+
+#### Plots for log fold change at different levels
+```{r}
+ggplot(fcDf, aes(LFC)) +
+        geom_histogram() +
+    facet_wrap(~levels)
+
+ggplot(fcDf, aes(levels, LFC)) +
+        geom_violin()
+
+ggplot(fcDf, aes(levels, LFC)) +
+        geom_boxplot()
+
+
+fcDf %>% group_by(levels) %>% 
+    summarize(prop_FCs = mean(LFC < 0.067))
+```
+At each level, we will have 10-12% differentially expressed nodes. We can decrease it more by further decreasing logFC criteria, since we wont be testing root anyway if 10-12% nodes is big
+
+#### Plotting pvalues against infRVs and levels
+```{r}
+load("environment/whole_txp/ySwishAllNodes.RData")
+df <- data.frame(IRVCut = cut(mcols(yAll)[["meanInfRV"]], breaks = quantile(mcols(yAll)[["meanInfRV"]], 0:4/4), include.lowest = T),
+                 levels, pvalue = mcols(yAll)[["pvalue"]], infRVs = mcols(yAll)[["meanInfRV"]])
+
+##pvalue histograms
+ggplot(df, aes(pvalue)) +
+  geom_histogram() + 
+  facet_grid(IRVCut ~ levels)
+
+## Only infRV
+ggplot(df, aes(pvalue)) +
+  geom_histogram() + 
+  facet_wrap(~IRVCut)
+
+### Violin plots
+ggplot(df, aes(IRVCut, -log10(pvalue))) +
+  geom_violin() + facet_wrap(~levels)
+
+ggplot(df, aes(IRVCut, -log10(pvalue))) +
+  geom_violin()
+
+df %>% group_by(IRVCut, levels) %>%
+  summarize(mean_prop_alt = mean(pvalue < 0.001)) %>%
+  ggplot(aes(IRVCut, levels, fill=mean_prop_alt)) +
+  geom_tile()
+
+df %>% group_by(IRVCut) %>%
+  summarize(mean_prop_alt = mean(pvalue < 0.001)) %>%
+  ggplot(aes(IRVCut, mean_prop_alt)) +
+  geom_bar(stat = "identity")
+
+df <- df %>% mutate(group=factor(paste(as.integer(IRVCut), as.integer(levels), sep="-")))
+table(df$group)
+```
+Irresepective of level, the peak of low pvalues seem to fall as infRV increases (histogram and violin). Highest infRV has the least power. From Violin plot, it seems based on levels, sometimes middle infRVs might have higher peaks.
+
+As levels increase, across most infRV bins power seems to increase. Across infRV for most levels, power increases 
+
+#### Running IHW
+```{r}
+library(IHW)
+### IHW only stratified by grouping infRV and levels
+res <- ihw(pvalue ~ group,  data = df,
+           alpha = 0.1,
+           covariate_type = "nominal")
+print(rejections(res))
+padjBH <- p.adjust(df$pvalue, method = "BH")
+print(sum(padjBH <= 0.1))
+plot(res)
+
+### IHW only stratified by infRV
+res2 <- ihw(pvalue ~ infRVs, data = df,
+           alpha = 0.1,
+           covariate_type = "ordinal")
+print(rejections(res2))
+plot(res2)
+```
+Power seems to increase for IHW compared to BH, many have weight 1
+
+#### Plottting IHW
+```{r}
+ihw_dat <- as.data.frame(res)
+ihw_dat$cov1 <- df$IRVCut
+ihw_dat$cov2 <- as.factor(df$levels)
+ihw_dat %>% group_by(group) %>%
+  summarize(mean_wt = mean(weight), mean_small=mean(pvalue < 1e-4),
+            cov1=first(cov1), cov2=first(cov2)) %>%
+  ggplot(aes(mean_small, mean_wt, color=cov1, shape=cov2)) + geom_point()
+
+ihw_dat2 <- as.data.frame(res2)
+ihw_dat2$cov1 <- df$IRVCut
+ihw_dat2 %>% group_by(group) %>%
+  summarize(mean_wt = mean(weight), mean_small=mean(pvalue < 1e-4),
+            cov1=first(cov1)) %>%
+  ggplot(aes(mean_small, mean_wt, color=cov1)) + geom_point()
+```
+
+#### Preparing folds for IHW by getting them on same branches
+```{r}
+df[["IRVCut"]] = cut(mcols(yAll)[["meanInfRV"]], breaks = quantile(mcols(yAll)[["meanInfRV"]], 0:8/8))
+rChildNodes <- Descendants(tree, nrow(y)+1, "children") ### Root child nodes
+folds <- rep(1, nrow(yAll))
+rParNodes <- rChildNodes[rChildNodes %in% seq(nrow(y))] ## Txps that directly map to root
+remChildNodes <- setdiff(rChildNodes, rParNodes)
+ch <- cut(remChildNodes, breaks = quantile(remChildNodes, 0:4/4))
+d <- split(remChildNodes, ch)
+for(i in seq_along(d))
+  folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")))] <- i+1
+
+print(table(folds))
+resgroup <- ihw(pvalue ~ infRVs, data = df,
+           alpha = 0.1, folds = folds,
+           covariate_type = "ordinal")
+plot(resgroup)
+print(rejections(resgroup))
+ihw_datgroup <- as.data.frame(resgroup)
+ihw_datgroup$cov1 <- df$IRVCut
+ihw_datgroup %>% group_by(group) %>%
+  summarize(mean_wt = mean(weight), mean_small=mean(pvalue < 1e-4),
+            cov1=first(cov1)) %>%
+  ggplot(aes(mean_small, mean_wt, color=cov1)) + geom_point()
+
+print(sum(ihw_datgroup$adj_pvalue<=0.1 & padjBH<=0.1))
+```
+Net total increase in 1, with a net overlap of 11335 nodes
+
