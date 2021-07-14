@@ -1,3 +1,26 @@
+source("tree_helper_function.R")
+library(IHW)
+library(foreach)
+library(doParallel)
+
+### Differences between infRV of a group and its descendants
+computeInfRVDiff <- function(tree, y)
+{
+    mIRVDiff <- rep(0.0, dim(y)[1])
+    infRVs <- mcols(y)[["meanInfRV"]]
+    mIRVDiff[seq_along(tree$tip.label)] <- infRVs[seq_along(tree$tip.label)]
+    innNodes <- length(tree$tip.label)+seq(tree$Nnode)
+    children <- Descendants(tree, innNodes, "children")
+    for(i in seq_along(innNodes))
+    #for(i in seq(10))
+    {
+        # print(mean(infRVs[children[[i]]]))
+        # print(infRVs[innNodes[i]])
+        mIRVDiff[innNodes[i]] = infRVs[innNodes[i]] - mean(infRVs[children[[i]]])
+    }
+    return(mIRVDiff)
+}
+
 getInfReps <- function(ys) {
     
     infRepError <- function(infRepIdx) {
@@ -39,7 +62,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
 {
     if(parent > length(mInfRV) | any(desc > length(mInfRV)))
         stop("Invalid parent or child indexes")
-    signDesc <- signs[desc]
+    signDesc <- signs[c(parent, desc)]
     if(all(signDesc >= 0) | all(signDesc <= 0))  ##same sign of children
     {
         if(all(!nodeSig[desc])) ## All are non signficant
@@ -47,8 +70,8 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
             pIRV <- mInfRV[parent]
             cIRV <- mInfRV[children]
             diff <- pIRV - mean(cIRV)
-            #if(diff <= infDiff)
-            if(pIRV >= infDiff)
+            if(diff <= infDiff)
+            #if(pIRV >= infDiff)
                 return(T)
             #print("irv")
             return(F)
@@ -67,10 +90,87 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
     }
 }
 
-computeReps <- function(tree, y, cond, pCutOff = 0.05, infDiff)
+doIHW <- function(y, tree, alpha, inds = NULL)
 {
-    # nodeSig <- rep(T, nrow(y)) ### node signficant or not
-    # nodeSig[mcols(y)[["pvalue"]] > pCutoff] = F
+    levels <- node.depth(tree, 2)
+    levels <- ifelse(levels > 4, 5, levels)
+    df <- data.frame(IRVCut = cut(mcols(y)[["meanInfRV"]], breaks = quantile(mcols(y)[["meanInfRV"]], 0:8/8), include.lowest = T),
+                     levels, pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]])
+    
+    rChildNodes <- Descendants(tree, length(tree$tip.label)+1, "children") ### Root child nodes
+    folds <- rep(1, nrow(y))
+    rParNodes <- rChildNodes[rChildNodes %in% seq_along(tree$tip.label)] ## Txps that directly map to root
+    remChildNodes <- setdiff(rChildNodes, rParNodes)
+    ch <- cut(remChildNodes, breaks = quantile(remChildNodes, 0:4/4))
+    d <- split(remChildNodes, ch)
+    for(i in seq_along(d))
+        folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")))] <- i+1
+    print(table(folds))
+    if(!is.null(inds))
+    {
+        if(!is.logical(inds) | length(inds) != nrow(y))
+            stop("Inds either not logical or does not have the same length as y")
+        df <- df[inds,]
+        folds <- folds[inds]
+        print(table(folds))    
+    }
+    resgroup <- ihw(pvalue ~ infRVs, data = df,
+                    alpha = alpha, folds = folds,
+                    covariate_type = "ordinal")
+}
+
+runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.1), cores = 1)
+{
+    if(!ihwType %in% c("a", "b"))
+        stop(paste("Invalid IHW type entered", ihwType))
+    
+    sols <- vector("list", length(alphas))
+    names(sols) <- as.character(alphas)
+    if(ihwType == "b")
+    {
+        resAlphas <- lapply(alphas, function(alpha) doIHW(y, tree, alpha))
+        resDfs <- mclapply(resAlphas, function(res) {
+                df <- as.data.frame(res)
+                df <- cbind(df, inds = seq(nrow(y)))
+                
+                df
+            }, mc.cores = cores)
+        nSol <- mclapply(seq_along(resDfs), function(i) {
+            runTreeTermAlpha(tree, y, cond, infDiff, resDfs[[i]][["adj_pvalue"]], pCutOff)
+        }, mc.cores = cores)
+        for(i in seq_along(alphas))
+            sols[[i]][["candNodeO"]] <- which(nSol[[i]][["candNode"]])
+    }
+    else
+    {
+        nSol <- runTreeTermAlpha(tree, y, cond, infDiff, mcols(y)[["pvalue"]], pCutOff)
+        resAlphas <- lapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[["nodesLooked"]]))
+        resDfs <- mclapply(resAlphas, function(res) 
+            {
+                df <- as.data.frame(res)
+                df <- cbind(df, inds = which(nSol[["nodesLooked"]]))
+                df
+            }, mc.cores = cores)
+        for(i in seq_along(alphas))
+            sols[[i]][["candNodeO"]] <- intersect(which(nSol[["candNode"]]), resDfs[[i]][resDfs[[i]]$adj_pvalue <= alphas[i],"inds"])
+        nSol <- list(nSol)
+    }
+    for(i in seq_along(alphas))
+    {
+        sols[[i]][["resIHW"]] <- resAlphas[[i]]
+        sols[[i]][["resDf"]] <- resDfs[[i]]
+        if(ihwType=="a")
+            i=1
+        sols[[i]][["nodesLooked"]] <- nSol[[i]][["nodesLooked"]]
+        sols[[i]][["candNode"]] <- nSol[[i]][["candNode"]]
+    }
+    return(sols)
+}
+
+runTreeTermAlpha <- function(tree, y, cond, infDiff, pvalue, pCutOff = 0.05)
+{
+    nodeSig <- rep(T, nrow(y)) ### node signficant or not
+    nodeSig[pvalue > pCutOff] = F
     
     tested <- rep(F, nrow(y)) ### tested or not (for IHW/qvalue/bonferroni)
     candNode <- rep(F, nrow(y)) ### Nodes that would be the output
@@ -81,7 +181,7 @@ computeReps <- function(tree, y, cond, pCutOff = 0.05, infDiff)
     nodesLooked[sigLeaves] = T
     candNode[sigLeaves] = T
     #tested[tree$tip.label] = T
-    #signs <- computeSign(y, cond)
+    signs <- computeSign(y, cond)
     for(n in nonSigLeaves) {
         if(nodesLooked[n])
             next()
@@ -94,13 +194,13 @@ computeReps <- function(tree, y, cond, pCutOff = 0.05, infDiff)
                 break()
             child <- unlist(Descendants(tree,p,"children"))
             desc <- unlist(Descendants(tree,p,"all"))
-            #if(!checkGoUp(p, child, signs, mcols(y)[["meanInfRV"]], infDiff, nodeSig))
-            if(!checkGoUp(p, desc, child, signs, mInfRV, infDiff, nodeSig))
+            if(!checkGoUp(p, desc, child, signs, mcols(y)[["meanInfRV"]], infDiff, nodeSig))
+            #if(!checkGoUp(p, desc, child, signs, mInfRV, infDiff, nodeSig))
                 break()
             foundCand <- T
             curNode <- p
         }
-        nodesLooked[c(p,curNode,unlist(Descendants(tree,curNode,"children")))] <- T ## not want to set right Descendants of parent if not a candidate
+        nodesLooked[c(p,curNode,unlist(Descendants(tree,curNode,"all")))] <- T ## not want to set right Descendants of parent if not a candidate
         if(foundCand)
         {
             if(nodeSig[curNode])
@@ -108,5 +208,5 @@ computeReps <- function(tree, y, cond, pCutOff = 0.05, infDiff)
         }
         #print(nodesLooked)
     }
-    return(candNode)
+    return(list("candNode" = candNode, "nodesLooked" = nodesLooked))
 }

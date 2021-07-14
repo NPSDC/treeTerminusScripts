@@ -389,3 +389,44 @@ findDistance <- function(tree, fpNodes, trueNodes)
 ###For the above check whether my driver nodes are in actual driver nodes
 ###Come up with a metrc for error (include a way to include depth and the other nodes)
 
+### Compute metrics w.r.t output predicted by a method as baseline
+computeMetOut2 <- function(logFCTrue, methNodes, lfcThresh = 0.067)
+{
+  tNodes <- which(abs(logFCTrue) >= lfcThresh)
+  tp = length(intersect(methNodes, tNodes))/length(methNodes)
+  fp = length(setdiff(methNodes, tNodes))/length(methNodes)
+  return(list("tp" = tp, "fp" = fp))
+}
+
+computeMetOut <- function(detNodes, nodesLooked, logFCTrue, tree = NULL, onlySig = F, lfcThresh = 0.067, res = T)
+{
+  if(onlySig)
+  {
+    if(is.null(tree))
+      stop("Tree cannot be null")
+    nodesLooked <- union(seq(length(tree$tip.label)),unique(c(detNodes,unlist(Descendants(tree, detNodes, "all")))))
+  }
+  logFCTrue <- logFCTrue[nodesLooked]
+  allNodes <- seq_along(nodesLooked)
+  names(allNodes) <- as.character(nodesLooked)
+  sNodes <- allNodes[as.character(detNodes)]
+  tpNodes <- which(abs(logFCTrue) >= lfcThresh)
+  tp = length(intersect(sNodes, tpNodes))/length(sNodes)
+  fp = length(setdiff(sNodes, tpNodes))/length(sNodes)
+  print(paste("tp", tp))
+  met <- computeTPFP(tpNodes, sNodes, y = NULL, logFC = logFCTrue, type = "all")
+  if(res)
+    return(met)
+  
+  fps <- as.numeric(names(allNodes)[setdiff(sNodes, tpNodes)])
+  fns <- as.numeric(names(allNodes)[setdiff(tpNodes, sNodes)])
+  tps <- as.numeric(names(allNodes)[tpNodes])
+  tns <- as.numeric(names(allNodes)[setdiff(allNodes, tpNodes)])
+  
+  return(list(fps = fps, fns = fns, tps = tps, tns = tns))
+}
+
+computeTDepth <- function(tree, methNodes)
+{
+  return(sum(node.depth(tree, 2)[methNodes])/length(methNodes))
+}

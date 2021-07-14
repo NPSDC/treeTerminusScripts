@@ -1,0 +1,219 @@
+---
+title: "Whole Txp Results"
+author: "Noor Pratap Singh"
+date: "7/5/2021"
+output: html_document
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading data
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/whole_txp/swish_y.RData")
+load("environment/whole_txp/ySwishAllNodes.RData")
+load("environment/whole_txp/tree.RData")
+load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
+
+load("environment/treeTerm/tBefore.RData")
+load("environment/treeTerm/tAfter.RData")
+load("environment/whole_txp/bSwish.RData")
+load("environment/whole_txp/bSwishInfRV.RData")
+```
+
+#### Processing Data
+```{r}
+missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[rownames(y),]
+
+innNodes <- nrow(y)+1:tree$Nnode
+iso.any <- iso.dtu | iso.dte | iso.dge
+diff_txps <- rownames(fold_changes)[iso.any[rownames(fold_changes)]]
+tLeaf <- which(rownames(y) %in% diff_txps)
+tLeafAll <- which(rownames(y) %in% names(iso.any)[iso.any])
+
+aggCountsNodes <- computeAggNodes(tree, c(1:nrow(y),innNodes), sim.counts.mat)
+fold_changes <- rbind(fold_changes, matrix(0, nrow = length(missingTxps), ncol = ncol(fold_changes),
+                                               dimnames = list(missingTxps, colnames(fold_changes))))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+
+print(mean(abs(logFCNodes[tLeaf]) > 0.067))
+print(mean(abs(logFCNodes[tLeafAll]) > 0.067))
+```
+
+#### Detected nodes
+```{r}
+detNodes <- list()
+detNodes[["OnlySwishL"]] <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(y)[,"qvalue"] <= x))
+#detNodes[["OnlySwishN"]] <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(yAll)[,"qvalue"] <= x))
+detNodes[["tcrSw"]] <- sapply(bSwish, function(sw) sw$output[sw$output$signal.node, "node"])
+detNodes[["tcrSwInf"]] <- sapply(bSwishInf, function(sw) sw$output[sw$output$signal.node, "node"])
+detNodes[["treeTermBSw"]] <- sapply(tBefore, function(tb) tb[["candNodeO"]])
+detNodes[["treeTermASw"]] <- sapply(tAfter, function(tb) tb[["candNodeO"]])
+```
+
+#### Performance on leafs
+```{r}
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(detNodes))
+{
+    stats <-  sapply(detNodes[[i]], function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf"))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(names(detNodes)[i],2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+#### Performance on all leaves
+```{r}
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(detNodes))
+{
+    stats <-  sapply(detNodes[[i]], function(nodes) computeTPFP(tLeafAll, nodes, y, NULL, tree, type="leaf"))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(names(detNodes)[i],2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+#### Peformance w.r.t nodes detected by method
+```{r}
+detNodes[["OnlySwishN"]] <- lapply(c(0.01,0.05,0.1), function(x) which(mcols(yAll)[,"qvalue"] <= x))
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(detNodes))
+{
+    if(i == 1)
+        nLooked <- seq(nrow(y))
+    else if(i == 5)
+        nLooked <- which(tAfter[["0.01"]][["nodesLooked"]])
+    else
+        nLooked <- seq(nrow(yAll))
+    stats <-  sapply(detNodes[[i]], function(nodes) computeMetOut(nodes, nLooked, logFCNodes))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(names(detNodes)[i],2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+#### Peformance w.r.t nodes detected where level is the candidate only
+```{r}
+dfC <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes)[c(4,5)])
+{
+    stats <-  sapply(detNodes[[n]], function(nodes) computeMetOut(nodes, NULL, logFCNodes, tree, T))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    dfC <- rbind(dfC, stats)
+}
+print(dfC)
+```
+
+#### Extract TP/FP
+```{r}
+metNodes <- list()
+for(n in names(detNodes)[c(4,5)])
+    metNodes[[n]] <-  lapply(detNodes[[n]], function(nodes) computeMetOut(nodes, NULL, logFCNodes, tree, T, res = F))
+fpsB <- metNodes[[1]][[3]][["fps"]]
+fnsB <- metNodes[[1]][[3]][["fns"]]
+
+fpsA <- metNodes[[2]][[3]][["fps"]]
+fnsA <- metNodes[[2]][[3]][["fns"]]
+```
+
+#### False positive/negative for before
+```{r}
+print(paste(length(fpsB), length(fnsB))) ### 354 False positives and 1996 False negatives
+plot(logFCNodes[fpsB], mcols(yAll)[fpsB, "log2FC"]) ### xaxis is the truth, yaxis is the simulated
+print(sum(fpsB > nrow(y))) ##Inner nodes that are false positives
+print(tBefore[[3]][["resDf"]][fpsB[fpsB > nrow(y)], "adj_pvalue"]) ### adjusted pvalue for inner nodes
+
+plot(logFCNodes[fnsB], mcols(yAll)[fnsB, "log2FC"]) ### Plotting false negatives
+fd <- fnsB[(sapply(fnsB, function(node) sum(Ancestors(tree, node) %in% detNodes[[4]][[3]]) > 0))] ## 100 False negative whose ancestor is detected
+print(length(fd))
+print(sum(tBefore[[3]]$resDf[setdiff(fnsB,fd),"adj_pvalue"] < 0.05)) ##0
+print(min(abs(mcols(yAll)[setdiff(fnsB,fd),"log2FC"])))
+print(max(abs(mcols(yAll)[setdiff(fnsB,fd),"log2FC"])))
+
+plot(logFCNodes[fd], mcols(yAll)[fd,"log2FC"])
+print(sum(tBefore[[3]]$resDf[fd,"adj_pvalue"] < 0.05))
+fd <- fnsB[fnsB > nrow(y)] ### 4 nodes
+print(sum(unlist(Ancestors(tree, fd)) %in% detNodes[[4]][[3]]))
+
+```
+Cant do much about false positives as all of these arise out because of simulated point estimates being larger than true counts (which are close to 0). 
+Around 100 nodes have ancestors that have been detected as significant by method. Looking closely at these 100 while all these have logFCs greater than 1, their IHW adjusted pvalues are not significant. All inner FNs have ancestors that are detected nodes (not descendants, which initial threat was that we are not going higher). All the other FNs have range of logFCs but their adjPValue is not significant
+
+#### False positive/negative for After
+```{r}
+print(paste(length(fpsA), length(fnsA)))
+plot(logFCNodes[fpsA], mcols(yAll)[fpsA, "log2FC"]) ### xaxis is the truth, yaxis is the simulated
+print(sum(fpsA > nrow(y))) ##10 Inner nodes that are false positives
+rDf <- tAfter[[3]][["resDf"]] 
+print(rDf[match(fpsA[fpsA > nrow(y)], rDf[["inds"]]), "adj_pvalue"]) ### adjusted pvalues for inner node
+
+plot(logFCNodes[fnsA], mcols(yAll)[fnsA, "log2FC"]) ### Plotting false negatives
+fd <- fnsA[(sapply(fnsA, function(node) sum(Ancestors(tree, node) %in% detNodes[[5]][[3]]) > 0))] ## 12 False negative whose ancestor is detected
+print(length(fd))
+print(sum(tAfter[[3]]$resDf[fd,"adj_pvalue"] < 0.05)) ##0
+plot(logFCNodes[fd], mcols(yAll)[fd,"log2FC"])
+
+fd <- fnsB[fnsB > nrow(y)] ### 4 nodes
+sum(unlist(Ancestors(tree, fd)) %in% detNodes[[4]][[3]])
+
+print(sum(fnsA > nrow(y))) ## No inner nodes
+```
+Only 10 inner nodes are FPs. Only 12 FNs have an ancestor as a detected node. Do we correct for this in the metric
+
+#### Entire txp
+```{r}
+metNodes <- lapply(detNodes[[4]], function(nodes) computeMetOut(nodes, seq(nrow(yAll)), logFCNodes, tree, F, res = F))
+fpsB <- metNodes[[3]][["fps"]]
+fnsB <- metNodes[[3]][["fns"]]
+print(paste(length(fpsB), length(fnsB)))
+
+tSigns <- rep(1, nrow(yAll))
+tSigns[logFCNodes < 0] <- -1
+tips <- Descendants(tree,(nrow(y)+1):nrow(yAll),"tips")
+for(i in seq_along(tips))
+{
+    ind <- nrow(y)+i
+    sign <- all(tSigns[tips[[i]]] > 0) | all(tSigns[tips[[i]]] < 0)
+    tSigns[ind] <- ifelse(sign, tSigns[ind], 0 )
+}
+
+fnsC <- fnsB[fnsB %in% which(tSigns==0)] ## 1876  nodes that have opposite signs of their children
+anscN <- Ancestors(tree, fnsB, "all")
+fnsA <- fnsB[sapply(anscN, function(nodes) sum(nodes %in% detNodes[[4]][[3]]) > 0)] ## FNs that have ancestors nodes in detected nodes
+print(length(fnsA)) ##100
+descN <- Descendants(tree, fnsB, "all")
+fnsD <- fnsB[sapply(descN, function(nodes) sum(nodes %in% detNodes[[4]][[3]]) > 0)] ## FNs that have descendant nodes in detected nodes
+print(length(fnsD)) ##3160
+print(length(intersect(fnsD, fnsC))) ##1707
+dnInt <- Descendants(tree, setdiff(fnsD, fnsC)) ## Nodes that have descendant as detected and have same sign of children 1453
+print(sum(sapply(dnInt, function(node) sum(tBefore[[3]][["resDf"]][["adj_pvalue"]] < 0.05) > 0))) ## All these nodes have atleast 1 singificant descendant node
+```
+1876 FNs have children with different signs and ideally should not be considered. Around 3160 nodes have their descendants detected as a detected node out of which 1453 are that have same signs. However all of them have atleast 1 significant node
+
+
+#### Distance from leaf
+```{r}
+df <- data.frame(Method=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(detNodes))
+{
+    stats <-  sapply(detNodes[[i]], function(nodes) computeTDepth(tree, nodes))
+    stats <- Reduce(cbind, stats)
+    colnames(stats) <- colnames(df)[2:4]
+    stats <- cbind(Method=names(detNodes)[i],  stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
