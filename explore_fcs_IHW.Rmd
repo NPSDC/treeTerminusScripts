@@ -43,9 +43,21 @@ ggplot(fcDf, aes(levels, LFC)) +
 
 
 fcDf %>% group_by(levels) %>% 
-    summarize(prop_FCs = mean(LFC < 0.067))
+    summarize(prop_FCs = mean(abs(LFC) < 0.067))
 ```
-At each level, we will have 10-12% differentially expressed nodes. We can decrease it more by further decreasing logFC criteria, since we wont be testing root anyway if 10-12% nodes is big
+
+
+#### Proportion greater than 0.067
+```{r}
+iso.any <- iso.dtu | iso.dte | iso.dge
+diff_txps <- rownames(fold_changes)[iso.any[rownames(fold_changes)]]
+tLeaf <- which(rownames(y) %in% diff_txps)
+tLeafAll <- which(rownames(y) %in% names(iso.any)[iso.any])
+
+print(mean(abs(logFCNodes[tLeaf]) > 0.067))
+print(mean(abs(logFCNodes[tLeafAll]) > 0.067))
+```
+At each level, we will have the proportion more or less increases of the DE nodes
 
 #### Plotting pvalues against infRVs and levels
 ```{r}

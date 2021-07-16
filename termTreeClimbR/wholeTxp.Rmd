@@ -9,8 +9,8 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 
 #### Loading data
 ```{r}
-source("tree_helper_function.R")
-source("tree_term_climb.R")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
 load("environment/whole_txp/swish_y.RData")
 load("environment/whole_txp/ySwishAllNodes.RData")
 load("environment/whole_txp/tree.RData")
@@ -54,15 +54,74 @@ table(signs)
 table(signs, levels)
 ```
 
-#### Running the tree
+#### Running the tree terminus climbing algorithm
+2 modes
+1) IHW is run before and then the adjusted pvalues are fed as input to tree terminus climbr (name given to the method we discussed)
+2) tree terminus climbing algorithm is run before and then nodes that are traversed during the turn are fed as an input to IHW, after which intersection is taken between candidate nodes output by tree terminus climbr and IHW signficant nodes
 ```{r}
-# tBefore <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cores = 3)
-tAfter <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3)
-# save(tBefore, file = "environment/treeTerm/tBefore.RData")
-save(tAfter, file = "environment/treeTerm/tAfter.RData")
+# tBefore4 <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cores = 3)
+# tAfter4 <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3)
+# save(tBefore4, file = "environment/treeTerm/tBefore4.RData")
+# save(tAfter4, file = "environment/treeTerm/tAfter4.RData")
+
+load("environment/treeTerm/tBefore4.RData")
+load("environment/treeTerm/tAfter4.RData")
+```
+The number of signficant nodes that are outputed by IHW and as a result of the method decreases as the input set passed to IHW is reduced.
+
+#### Testing
+```{r}
+for(i in seq_along(tBefore4))
+{
+    negNodes <- tBefore4[[i]][["negNodeO"]]
+    posNodes <- tBefore4[[i]][["candNodeO"]]
+    dN <- unlist(Descendants(tree, negNodes, "tips"))
+    dP <- unlist(Descendants(tree, posNodes, "tips"))
+    print(length(unique(dN)) == length(dN)) ## Neg nodes no sub branches
+    print(length(unique(dP)) == length(dP)) ## Pos nodes no sub branches
+    
+    print(sum(sort(c(unique(dN),unique(dP))) != seq(length(tree$tip.label))) == 0) ## All tips are covered
+}
+
+for(i in seq_along(tAfter4))
+{
+    negNodes <- tAfter4[[i]][["negNodeO"]]
+    posNodes <- tAfter4[[i]][["candNodeO"]]
+    dN <- unlist(Descendants(tree, negNodes, "tips"))
+    dP <- unlist(Descendants(tree, posNodes, "tips"))
+    print(length(unique(dN)) == length(dN)) ## Neg nodes no sub branches
+    print(length(unique(dP)) == length(dP)) ## Pos nodes no sub branches
+    
+    print(sum(sort(c(unique(dN),unique(dP))) != seq(length(tree$tip.label))) == 0) ## All tips are covered
+}
 ```
 
+### Statistics on  nodes
 
-### Variations to run upon
-before/after IHW, FDR - 0.1-0.1, varying pvalues, different stopping criteria based on IVAR, no stopping criteria based on infRV
-run on entire tree, only tree
+#### Total number of nodes
+```{r}
+print(sapply(tBefore4, function(node) length(node[["candNodeO"]])))
+print(sapply(tAfter4, function(node) length(node[["candNodeO"]])))
+```
+
+#### Distribution of node levels (detected and not detected)
+```{r}
+print(sapply(tBefore4, function(node) table(levels[node[["candNodeO"]]])))
+print(sapply(tAfter4, function(node) table(levels[node[["candNodeO"]]])))
+
+print(sapply(tBefore4, function(node) table(levels[node[["negNodeO"]]])))
+print(sapply(tAfter4, function(node) table(levels[node[["negNodeO"]]])))
+```
+
+#### Distributions of nodes based on treeClimbR
+```{r}
+load("environment/whole_txp/bSwish.RData")
+nodes <- sapply(bSwish, function(sw) sw$output[sw$output$signal.node, "node"])
+print(sapply(nodes, function(node) table(levels[node])))
+```
+
+treeClimbR has the maximum number of innner nodes followed by treeTerm - before and -after
+
+#### Other Variations to run upon
+varying pvalues, different stopping criteria based on IVAR, no stopping criteria based on infRV
+run on entire tree, only tree, different IHW criteria, varying signs, clarifying 
