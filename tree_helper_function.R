@@ -398,14 +398,20 @@ computeMetOut2 <- function(logFCTrue, methNodes, lfcThresh = 0.067)
   return(list("tp" = tp, "fp" = fp))
 }
 
-computeMetOut <- function(detNodes, nodesLooked, logFCTrue, tree = NULL, onlySig = F, lfcThresh = 0.067, res = T)
+computeMetOut <- function(detNodes, logFCTrue, negNodes = NULL, nodesLooked = NULL, tree = NULL, onlyDet = F, lfcThresh = 0.067, res = T)
 {
-  if(onlySig)
+  if(onlyDet)
   {
     if(is.null(tree))
       stop("Tree cannot be null")
-    nodesLooked <- union(seq(length(tree$tip.label)),unique(c(detNodes,unlist(Descendants(tree, detNodes, "all")))))
+    if(!is.null(negNodes))
+      stop("neg nodes should be null")
+    descLeaves <- unlist(Descendants(tree, detNodes, "tips"))
+    nodesLooked <- sort(c(setdiff(seq_along(tree$tip.label), descLeaves), detNodes))
   }
+  if(!is.null(negNodes))
+    nodesLooked <- sort(c(negNodes, detNodes))
+  
   logFCTrue <- logFCTrue[nodesLooked]
   allNodes <- seq_along(nodesLooked)
   names(allNodes) <- as.character(nodesLooked)
@@ -413,6 +419,7 @@ computeMetOut <- function(detNodes, nodesLooked, logFCTrue, tree = NULL, onlySig
   tpNodes <- which(abs(logFCTrue) >= lfcThresh)
   tp = length(intersect(sNodes, tpNodes))/length(sNodes)
   fp = length(setdiff(sNodes, tpNodes))/length(sNodes)
+  
   print(paste("tp", tp))
   met <- computeTPFP(tpNodes, sNodes, y = NULL, logFC = logFCTrue, type = "all")
   if(res)
@@ -422,7 +429,6 @@ computeMetOut <- function(detNodes, nodesLooked, logFCTrue, tree = NULL, onlySig
   fns <- as.numeric(names(allNodes)[setdiff(tpNodes, sNodes)])
   tps <- as.numeric(names(allNodes)[tpNodes])
   tns <- as.numeric(names(allNodes)[setdiff(allNodes, tpNodes)])
-  
   return(list(fps = fps, fns = fns, tps = tps, tns = tns))
 }
 

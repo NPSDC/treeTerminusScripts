@@ -69,6 +69,14 @@ load("environment/treeTerm/tAfter4.RData")
 ```
 The number of signficant nodes that are outputed by IHW and as a result of the method decreases as the input set passed to IHW is reduced.
 
+```{r}
+tBefore_Child <- mclapply(seq(0.01,0.04,0.01), function(p) runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = p, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cores = 3), mc.cores = 4)
+save(tBefore_Child, file = "environment/treeTerm/tBefore_Child.RData")
+
+# tAfter_Child <- mclapply(seq(0.01,0.04,0.01), function(p) runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = p, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3), mc.cores = 4)
+# save(tAfter_Child, file = "environment/treeTerm/tAfter_Child.RData")
+```
+
 #### Testing
 ```{r}
 for(i in seq_along(tBefore4))

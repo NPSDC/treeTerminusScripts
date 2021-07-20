@@ -226,14 +226,28 @@ print(dfC)
 <!-- 1876 FNs have children with different signs and ideally should not be considered. Around 3160 nodes have their descendants detected as a detected node out of which 1453 are that have same signs. However all of them have atleast 1 significant node -->
 
 
-#### Distance from leaf
+#### Distance from leaf (candidate nodes)
 ```{r}
 df <- data.frame(Method=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
 for(i in seq_along(detNodes))
 {
     stats <-  sapply(detNodes[[i]], function(nodes) computeTDepth(tree, nodes))
     stats <- Reduce(cbind, stats)
-    colnames(stats) <- colnames(df)[2:4]
+    colnames(stats) <- colnames(df)[2:5]
+    stats <- cbind(Method=names(detNodes)[i],  stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+#### Distance from leaf (negative nodes)
+```{r}
+df <- data.frame(Method=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(i in seq_along(negNodes))
+{
+    stats <-  sapply(negNodes[[i]], function(nodes) computeTDepth(tree, nodes))
+    stats <- Reduce(cbind, stats)
+    colnames(stats) <- colnames(df)[2:5]
     stats <- cbind(Method=names(detNodes)[i],  stats)
     df <- rbind(df, stats)
 }
