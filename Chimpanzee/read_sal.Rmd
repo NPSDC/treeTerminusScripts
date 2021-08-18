@@ -1,0 +1,211 @@
+---
+title: "Chimpanzee Bulk Data"
+author: "Noor Pratap Singh"
+date: "8/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Data
+```{r}
+suppressPackageStartupMessages(library(tximeta))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(fishpond))
+metaData <- read.delim("/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/SYNAPSE_METADATA_MANIFEST.tsv")
+quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/out_sal"
+samples <- sapply(strsplit(metaData[,"path"], split = "/", fixed = T), function(x) x[[length(x)]])
+samples <- sapply(strsplit(samples, ".", fixed = T), function(x) x[[1]])
+files <- file.path(quantDir, samples, "quant.sf")
+colData <- cbind(data.frame(files = files, names = samples), metaData)
+colData[["condition"]] <- ifelse(colData[["tissue"]] == "cerebellum", "Cere", "Rest")
+# seChimp <- tximeta::tximeta(colData)
+# save(seChimp, file = "environment/Chimp/se_chimp.RData")
+load("environment/Chimp/se_chimp.RData")
+colData(seChimp)[["condition"]] <- as.factor(colData[["condition"]])
+```
+
+### Some statistics
+```{r}
+print(table(metaData[,"tissue"])) ### Number of replicates per tissue
+print(table(metaData[,"individualID"])) ### Number of replicates per patient
+hist(colSums(assays(seChimp)[["counts"]]))
+df <- data.frame(depth=colSums(assays(seChimp)[["counts"]]), patient = metaData[,"individualID"])
+print(df %>% group_by(patient) %>% summarise(mDepth = mean(depth)))
+
+print(sum(rowSums(assays(seChimp)[["counts"]]) <= 10))
+print(sum(apply(assays(seChimp)[["counts"]], 1, function(x) sum(x != 0) == 4)))
+```
+
+
+#### PCA
+```{r}
+sampDorNucl <- colData %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% select(names) %>% unlist
+dds <- DESeqDataSet(seChimp, design=~tissue)
+dds <- estimateSizeFactors(dds)
+dds <- dds[rowSums(assays(seChimp)[["counts"]]) > 10,]
+vsd <- vst(dds)
+
+plotPCA(vsd, intgroup=c("tissue"), ntop=1000)
+plotPCA(vsd, intgroup=c("individualID"), ntop=1000)
+
+plotPCA(vsd, intgroup=c("tissue"), ntop=500)
+```
+There seems to exist a difference between cerebellum and medial dorsal nucleus. However, the patient clearly seems different and has the lowest depth.
+
+#### Removing samples from patient 162
+```{r}
+samp162 <- colData %>% filter(individualID == "PTB162") %>% select(names) %>% unlist
+vsdR162 <- vst(dds[,!(colnames(dds) %in% samp162)])
+plotPCA(vsdR162, intgroup=c("tissue"), ntop=1000)
+plotPCA(vsdR162, intgroup=c("individualID"), ntop=1000)
+rm(vsdR162, vsd)
+gc()
+```
+There seems batch effects now due to sample 165 well
+
+<!-- #### Removing samples from medial prefrontal cortex and 162 -->
+<!-- ```{r} -->
+
+<!-- vsdRDorNucl <- vst(dds[,!(colnames(dds) %in% sampDorNucl)]) -->
+<!-- plotPCA(vsdRDorNucl, intgroup=c("tissue"), ntop=1000) -->
+<!-- plotPCA(vsdRDorNucl, intgroup=c("individualID"), ntop=1000) -->
+<!-- rm(vsdRDorNucl, vsdR162, vsd) -->
+<!-- gc() -->
+<!-- ``` -->
+<!-- Now we see sample 165 as separated  -->
+
+#### SVA on entire dataset removing dorsal samples
+```{r}
+dds <- dds[,!(colnames(dds) %in% sampDorNucl)]
+print(dim(dds))
+suppressPackageStartupMessages(library(sva))
+suppressPackageStartupMessages(library(ggplot2))
+mm <- model.matrix(~ condition, colData(dds))
+mm0 <- model.matrix(~ 1, colData(dds))
+
+norm.cts <- counts(dds, normalized=TRUE)
+norm.cts <- norm.cts[rowSums(norm.cts) > 0,]
+fit <- svaseq(norm.cts, mod=mm, mod0=mm0, n.sv=2)
+df <- data.frame(SV1=fit$sv[,1], SV2=fit$sv[,2], cond = colData(dds)[,"condition"], indID = colData(dds)[,"individualID"])
+ggplot(df, aes(SV1, SV2, color=indID)) + geom_point()
+rm(norm.cts)
+gc()
+```
+We see 162,165 clearly shown separately by SV
+
+#### SVA without removing 162
+```{r}
+ddsR162 <- dds[,!(colnames(dds) %in% samp162)]
+norm.cts <- counts(ddsR162, normalized=TRUE)
+mm <- model.matrix(~ condition, colData(ddsR162))
+mm0 <- model.matrix(~ 1, colData(ddsR162))
+norm.cts <- norm.cts[rowSums(norm.cts) > 0,]
+fitR162 <- svaseq(norm.cts, mod=mm, mod0=mm0, n.sv=2)
+df <- data.frame(SV1=fitR162$sv[,1], SV2=fitR162$sv[,2], cond = colData(ddsR162)[,"condition"], indID = colData(ddsR162)[,"individualID"])
+ggplot(df, aes(SV1, SV2, color=indID)) + geom_point()
+rm(dds, ddsR162, norm.cts)
+gc()
+```
+All samples seem to be captured here by SVA
+
+#### Batch Effect correction
+```{r}
+corrBESwish <- function(se, samples, fit)
+{
+    y <- se[,!(colnames(se) %in% samples)]
+    print(dim(y))
+    y <- scaleInfReps(y, saveMeanScaled=TRUE)
+    y <- labelKeep(y)
+    y <- y[mcols(y)$keep,]
+    print(dim(y))
+    
+    infRepIdx <- grep("infRep",assayNames(y),value=TRUE)
+    nreps <- length(infRepIdx)
+    
+    mm <- model.matrix(~condition, colData(y))
+    
+    pc <- .1
+    for (k in seq_len(nreps)) {
+      logInfRep <- log(assay(y, infRepIdx[k]) + pc)
+      logInfRep <- limma::removeBatchEffect(
+                            logInfRep,
+                            covariates=fit[["sv"]],
+                            design=mm)
+      assay(y, infRepIdx[k]) <- exp(logInfRep)
+    }
+    gc()
+    y <- swish(y, x="condition")
+    y
+}
+```
+
+#### Running Swish after batch correction
+```{r}
+# y <- corrBESwish(seChimp, sampDorNucl, fit) ## Swish on all samples
+# save(y, file = "environment/Chimp/y.RData")
+load("environment/Chimp/y.RData")
+dd <- mcols(y)
+dd <- dd[order(dd[["qvalue"]]),]
+rm(y)
+gc()
+
+# yR162 <- corrBESwish(seChimp, union(sampDorNucl, samp162), fitR162) ## Swish by removing 162
+# save(yR162, file = "environment/Chimp/yR162.RData")
+load("environment/Chimp/yR162.RData")
+ddR162 <- mcols(yR162)
+ddR162 <- ddR162[order(ddR162[["qvalue"]]),]
+rm(yR162)
+gc()
+```
+
+#### Total signficant txps and the intersection of the top z txps based on qvalues
+```{r}
+print(sum(dd[["qvalue"]] < 0.05 & abs(dd[["log2FC"]]) > 1))
+print(sum(ddR162[["qvalue"]] < 0.05 & abs(ddR162[["log2FC"]])>1))
+
+print(sapply(c(10,100,500,1000,2000,5000,7000,10000), function(x) {
+  length(intersect(rownames(dd)[1:x], rownames(ddR162)[1:x]))
+}))
+```
+There exists a lot of intersection
+
+```{r fig.width=12, fig.height=12}
+load("environment/Chimp/y.RData")
+
+hist(mcols(y)$pvalue)
+sig <- mcols(y)$qvalue < .05
+lo <- order(mcols(y)$log2FC * sig)
+hi <- order(-mcols(y)$log2FC * sig)
+
+with(mcols(y),
+     table(sig=qvalue < .05, sign.lfc=sign(log2FC))
+     )
+top_up <- mcols(y)[head(hi),]
+print(top_up)
+top_down <- mcols(y)[head(lo),]
+print(top_down)
+
+pL <- list()
+plotMASwish(y, alpha = 0.05)
+par(mfrow=c(2,5))
+for(i in c(1,2,6,7,30,48,59,86,110,211))
+  plotInfReps(y, idx=hi[i], x="condition")
+
+par(mfrow=c(2,5))
+for(i in c(257,384,471,619,736,764,800,900,950,1000))
+  plotInfReps(y, idx=hi[i], x="condition")
+
+par(mfrow=c(2,5))
+for(i in c(1,29,34,37,59,61,154,163,201,250))
+  plotInfReps(y, idx=lo[i], x="condition")
+par(mfrow=c(1,5))
+for(i in c(300,500,600,700,800))
+  plotInfReps(y, idx=lo[i], x="condition")
+
+```

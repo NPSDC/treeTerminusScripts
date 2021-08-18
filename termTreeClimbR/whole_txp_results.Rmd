@@ -7,20 +7,65 @@ output: html_document
 
 
 ```{r, setup, include=FALSE}
-knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+#knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+knitr::opts_knit$set(root.dir = '~/cbcb_rob/Uncertainity/treeTerminusScripts')
 ```
 
 #### Loading data
 ```{r}
-suppressPackageStartupMessages(source("tree_helper_function.R"))
-suppressPackageStartupMessages(source("tree_term_climb.R"))
+library(phangorn)
+getTruth <- function(n, trueInds)
+{
+  truth <- rep(0,n)
+  truth[trueInds] <- 1
+  as.factor(truth)
+}
+
+computeTPFP <- function(tSig, sSig, y, logFC = NULL, tree = NULL, type = "all", pTab = F)
+{
+  # nodeDf <- bouth_ob$tree@node
+  # nodeDf$id[nodeDf$id=="Root"] <- as.character(nrow(y)+1)
+  # inds <- match(nodeDf$id, as.character(seq_along(logFC)))
+  # pvalues <- bouth_ob$tree@test$pvalue[inds]
+    if(type == "all")
+    {
+      truth <- getTruth(length(logFC), tSig)
+      simTruth <- getTruth(length(logFC), sSig)    
+    }
+    else 
+    {
+      if(is.null(tree))
+        stop("Tree cannot be null")
+      tSig <- unique(unlist(Descendants(tree, tSig, type = "tips")))
+      sSig <- unique(unlist(Descendants(tree, sSig, type = "tips")))
+      truth <- getTruth(nrow(y), tSig)
+      simTruth <- getTruth(nrow(y), sSig)
+    }
+    
+    tab <- table(simTruth, truth)
+    tpr <- tab[2,2]/colSums(tab)[2]
+    fdr <- tab[2,1]/rowSums(tab)[2]
+    if(pTab)
+      print(tab)
+    list(fdr=fdr, tpr=tpr)
+}
+
+computeTDepth <- function(tree, methNodes)
+{
+  return(sum(node.depth(tree, 2)[methNodes])/length(methNodes))
+}
+
+# suppressPackageStartupMessages(source("tree_helper_function.R"))
+# suppressPackageStartupMessages(source("tree_term_climb.R"))
 load("environment/whole_txp/swish_y.RData")
 load("environment/whole_txp/ySwishAllNodes.RData")
 load("environment/whole_txp/tree.RData")
 load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
 
 load("environment/treeTerm/tBefore4.RData")
+load("environment/treeTerm/tBeforeNoStop.RData")
 load("environment/treeTerm/tAfter4.RData")
+load("environment/treeTerm/tAfterNoStop.RData")
 load("environment/whole_txp/bSwish.RData")
 load("environment/whole_txp/bSwishInfRV.RData")
 ```
@@ -56,6 +101,8 @@ detNodes[["tcrSw"]] <- sapply(bSwish, function(sw) sw$output[sw$output$signal.no
 detNodes[["tcrSwInf"]] <- sapply(bSwishInf, function(sw) sw$output[sw$output$signal.node, "node"])
 detNodes[["treeTermBSw"]] <- sapply(tBefore4, function(tb) tb[["candNodeO"]])
 detNodes[["treeTermASw"]] <- sapply(tAfter4, function(tb) tb[["candNodeO"]])
+detNodes[["treeTermBNoSt"]] <- sapply(tBeforeNoStop, function(tb) tb[["candNodeO"]])
+detNodes[["treeTermANoSt"]] <- sapply(tAfterNoStop, function(tb) tb[["candNodeO"]])
 ```
 
 #### Performance on leafs
@@ -95,7 +142,9 @@ for(i in seq_along(detNodes))
     if(i == 1)
         nLooked <- seq(nrow(y))
     else if(i == 5)
-        nLooked <- which(tAfter4[["q0.01"]][["nodesLooked"]])
+        nLooked <- which(tAfter4[["0.01"]][["nodesLooked"]])
+    else if(i == 7)
+        nLooked <- which(tAfterNoStop[["0.01"]][["nodesLooked"]])
     else
         nLooked <- seq(nrow(yAll))
     stats <-  sapply(detNodes[[i]], function(nodes) computeMetOut(nodes, logFCNodes, tree = tree, nodesLooked = nLooked))
@@ -106,14 +155,12 @@ for(i in seq_along(detNodes))
 print(df)
 ```
 
-computeMetOut <- function(detNodes, logFCTrue, negNodes = NULL, nodesLooked = NULL, tree = NULL, onlyDet = F, lfcThresh = 0.067, res = T)
-
 
 #### Detected nodes and the remaining leaves
 The set for consideration here are the candidate nodes - given by each method and all the leaves that are not the descendants of these candidate nodes. We want to evaluate only on the nodes that are outputed/tested by the method and ignore everything else. So assumption here is that if an inner node is selected, we dont want to comment about the status of its descendants/children and thus do not include them for calculation. Every leaf node that is not a descendant of the detected node is assumed to be given as not detected by the algorithm and is used accordingly for computing the metric.
 ```{r}
 dfC <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
-for(n in names(detNodes)[c(2:5)])
+for(n in names(detNodes)[c(2:7)])
 {
     stats <-  sapply(detNodes[[n]], function(nodes) computeMetOut(nodes, logFCNodes, tree = tree, onlyDet = T))
     colnames(stats) <- colnames(df)[c(3:5)]
@@ -129,8 +176,10 @@ Our algorithm also returns a set of negative nodes (ie at a higer level it makes
 negNodes <- list()
 negNodes[["treeTermBSw"]] <- sapply(tBefore4, function(tb) tb[["negNodeO"]])
 negNodes[["treeTermASw"]] <- sapply(tAfter4, function(tb) tb[["negNodeO"]])
+negNodes[["treeTermBNoSt"]] <- sapply(tBeforeNoStop, function(tb) tb[["negNodeO"]])
+negNodes[["treeTermANoSt"]] <- sapply(tAfterNoStop, function(tb) tb[["negNodeO"]])
 dfC <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
-for(n in names(detNodes)[c(4:5)])
+for(n in names(detNodes)[c(4:7)])
 {
     stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]]))
     colnames(stats) <- colnames(df)[c(3:5)]
@@ -233,7 +282,7 @@ for(i in seq_along(detNodes))
 {
     stats <-  sapply(detNodes[[i]], function(nodes) computeTDepth(tree, nodes))
     stats <- Reduce(cbind, stats)
-    colnames(stats) <- colnames(df)[2:5]
+    colnames(stats) <- colnames(df)[2:4]
     stats <- cbind(Method=names(detNodes)[i],  stats)
     df <- rbind(df, stats)
 }
@@ -247,8 +296,8 @@ for(i in seq_along(negNodes))
 {
     stats <-  sapply(negNodes[[i]], function(nodes) computeTDepth(tree, nodes))
     stats <- Reduce(cbind, stats)
-    colnames(stats) <- colnames(df)[2:5]
-    stats <- cbind(Method=names(detNodes)[i],  stats)
+    colnames(stats) <- colnames(df)[2:4]
+    stats <- cbind(Method=names(negNodes)[i],  stats)
     df <- rbind(df, stats)
 }
 print(df)

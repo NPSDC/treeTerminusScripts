@@ -4,13 +4,14 @@ output: html_notebook
 ---
 
 ```{r, setup, include=FALSE}
-knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+#knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+knitr::opts_knit$set(root.dir = '~/cbcb_rob/Uncertainity/treeTerminusScripts')
 ```
 
 #### Loading data
 ```{r}
-suppressPackageStartupMessages(source("tree_helper_function.R"))
-suppressPackageStartupMessages(source("tree_term_climb.R"))
+# suppressPackageStartupMessages(source("tree_helper_function.R"))
+# suppressPackageStartupMessages(source("tree_term_climb.R"))
 load("environment/whole_txp/swish_y.RData")
 load("environment/whole_txp/ySwishAllNodes.RData")
 load("environment/whole_txp/tree.RData")
@@ -20,38 +21,61 @@ load("../mikelove-swimdown-216a1dd/simulate/data/simulate.rda")
 
 #### Visualizing infRVs(difference) for the inner Nodes
 ```{r}
-infRVs <- mcols(yAll)[["meanInfRV"]]
-mIRVDiff <- computeInfRVDiff(tree, yAll)
-
-mIRV_cut <- cut(mIRVDiff[nrow(y)+1:tree$Nnode], breaks = quantile(mIRVDiff[nrow(y)+1:tree$Nnode], 0:4/4), include.lowest = T)
-print(table(mIRV_cut))
-IRV_cut <- cut(infRVs[nrow(y)+1:tree$Nnode], breaks = quantile(infRVs[nrow(y)+1:tree$Nnode], 0:4/4), include.lowest = T)
-print(table(IRV_cut))
-
+# infRVs <- mcols(yAll)[["meanInfRV"]]
+# mIRVDiff <- computeInfRVDiff(tree, yAll)
+# 
+# mIRV_cut <- cut(mIRVDiff[nrow(y)+1:tree$Nnode], breaks = quantile(mIRVDiff[nrow(y)+1:tree$Nnode], 0:4/4), include.lowest = T)
+# print(table(mIRV_cut))
+# IRV_cut <- cut(infRVs[nrow(y)+1:tree$Nnode], breaks = quantile(infRVs[nrow(y)+1:tree$Nnode], 0:4/4), include.lowest = T)
+# print(table(IRV_cut))
+# 
 termSwimThresh <- mean(c(-3.8223631318627858,-3.6433994917165045,-3.6568587953449123,-3.7615266573162742,-3.74218233312281,
     -3.7825084537263063,-3.681508024209264,-3.6888354232562355,-3.811711665323895,-3.7328311655820956,-3.6988339545709255,-3.892522972438748))
-
-print(mean(mIRVDiff[nrow(y)+1:tree$Nnode] <= termSwimThresh)) ### Based on difference
-print(mean(infRVs[nrow(y)+1:tree$Nnode] > 0.176)) ### Based on actual inferential variance
-
-print(mean(infRVs[nrow(y)+1:tree$Nnode] > 0.176 & mIRVDiff[nrow(y)+1:tree$Nnode] <= termSwimThresh))
-
-mP <- mIRVDiff[nrow(y)+1:tree$Nnode][mIRVDiff[nrow(y)+1:tree$Nnode] >= 0]
-mN <- mIRVDiff[nrow(y)+1:tree$Nnode][mIRVDiff[nrow(y)+1:tree$Nnode] < 0]
-hist(log10(mP)) ##Positive differences
-hist(log10(abs(mN))) ##Negative differences
-hist(log10(infRVs[nrow(y)+1:tree$Nnode]))
+# 
+# print(mean(mIRVDiff[nrow(y)+1:tree$Nnode] <= termSwimThresh)) ### Based on difference
+# print(mean(infRVs[nrow(y)+1:tree$Nnode] > 0.176)) ### Based on actual inferential variance
+# 
+# print(mean(infRVs[nrow(y)+1:tree$Nnode] > 0.176 & mIRVDiff[nrow(y)+1:tree$Nnode] <= termSwimThresh))
+# 
+# mP <- mIRVDiff[nrow(y)+1:tree$Nnode][mIRVDiff[nrow(y)+1:tree$Nnode] >= 0]
+# mN <- mIRVDiff[nrow(y)+1:tree$Nnode][mIRVDiff[nrow(y)+1:tree$Nnode] < 0]
+# hist(log10(mP)) ##Positive differences
+# hist(log10(abs(mN))) ##Negative differences
+# hist(log10(infRVs[nrow(y)+1:tree$Nnode]))
 ```
 Around 55% inner nodes match that meet boths the above criteria
 
 #### A look at signs of the nodes/txps
 ```{r}
+# computeSign <- function(y, x, pc = 5, minP = 0.7) {
+#     infRepsArray <- getInfReps(y)
+#     condition <- colData(y)[[x]]
+#     stopifnot(is.factor(condition))
+#     stopifnot(nlevels(condition) == 2)
+#     stopifnot(!anyNA(condition))
+#     
+#     dims <- dim(infRepsArray)
+#     cond1 <- condition == levels(condition)[1]
+#     cond2 <- condition == levels(condition)[2]
+#     diffs <- matrix(nrow=dims[1],ncol=dims[3])
+#     for (k in seq_len(dims[3])) {
+#         diffs[,k] <- log2(rowMeans(infRepsArray[,cond2,k]) + pc) -
+#             log2(rowMeans(infRepsArray[,cond1,k]) + pc)
+#     }
+#     signs <- rep(0, dims[1])
+#     pos <- diffs>0
+#     #print(head(pos))
+#     signs[rowMeans(pos) >= minP] = 1
+#     signs[rowMeans(!pos) >= minP] = -1
+#     return(signs)
+# }
+
 levels <- node.depth(tree, 2)
 levels <- ifelse(levels > 4, 5, levels)
 
-signs <- computeSign(yAll, "condition")
-table(signs)
-table(signs, levels)
+# signs <- computeSign(yAll, "condition")
+# table(signs)
+# table(signs, levels)
 ```
 
 #### Running the tree terminus climbing algorithm
@@ -60,18 +84,21 @@ table(signs, levels)
 2) tree terminus climbing algorithm is run before and then nodes that are traversed during the turn are fed as an input to IHW, after which intersection is taken between candidate nodes output by tree terminus climbr and IHW signficant nodes
 ```{r}
 # tBefore4 <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cores = 3)
-# tAfter4 <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3)
+# tAfterU <- runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3)
 # save(tBefore4, file = "environment/treeTerm/tBefore4.RData")
-# save(tAfter4, file = "environment/treeTerm/tAfter4.RData")
-
-load("environment/treeTerm/tBefore4.RData")
-load("environment/treeTerm/tAfter4.RData")
+# save(tAfterU, file = "environment/treeTerm/tAfterU.RData")
+# tBeforeNoStop <- runTreeTermAlphas(tree, yAll, "condition", 1e6, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cSign = F, cores = 3)
+# tAfterNoStopU <- runTreeTermAlphas(tree, yAll, "condition", 1e6, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cSign = F, cores = 3)
+# # save(tBeforeNoStop, file = "environment/treeTerm/tBeforeNoStop.RData")
+# save(tAfterNoStopU, file = "environment/treeTerm/tAfterNoStopU.RData")
+# load("environment/treeTerm/tBefore4.RData")
+#load("environment/treeTerm/tAfter2.RData")
 ```
 The number of signficant nodes that are outputed by IHW and as a result of the method decreases as the input set passed to IHW is reduced.
 
 ```{r}
-tBefore_Child <- mclapply(seq(0.01,0.04,0.01), function(p) runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = p, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cores = 3), mc.cores = 4)
-save(tBefore_Child, file = "environment/treeTerm/tBefore_Child.RData")
+# tBefore_Child <- mclapply(seq(0.01,0.04,0.01), function(p) runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = p, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cores = 3), mc.cores = 4)
+# save(tBefore_Child, file = "environment/treeTerm/tBefore_Child.RData")
 
 # tAfter_Child <- mclapply(seq(0.01,0.04,0.01), function(p) runTreeTermAlphas(tree, yAll, "condition", termSwimThresh, pCutOff = 0.05, pChild = p, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3), mc.cores = 4)
 # save(tAfter_Child, file = "environment/treeTerm/tAfter_Child.RData")
@@ -79,29 +106,32 @@ save(tBefore_Child, file = "environment/treeTerm/tBefore_Child.RData")
 
 #### Testing
 ```{r}
-for(i in seq_along(tBefore4))
-{
-    negNodes <- tBefore4[[i]][["negNodeO"]]
-    posNodes <- tBefore4[[i]][["candNodeO"]]
-    dN <- unlist(Descendants(tree, negNodes, "tips"))
-    dP <- unlist(Descendants(tree, posNodes, "tips"))
-    print(length(unique(dN)) == length(dN)) ## Neg nodes no sub branches
-    print(length(unique(dP)) == length(dP)) ## Pos nodes no sub branches
-    
-    print(sum(sort(c(unique(dN),unique(dP))) != seq(length(tree$tip.label))) == 0) ## All tips are covered
+load("environment/treeTerm/tBefore4.RData")
+load("environment/treeTerm/tBeforeNoStop.RData")
+load("environment/treeTerm/tAfter4.RData")
+load("environment/treeTerm/tAfterNoStop.RData")
+load("environment/whole_txp/bSwish.RData")
+test <- function(tTest) {
+    vals <- rep(T, length(tTest))
+    for(i in seq_along(tTest))
+    {
+        d <- c()
+        negNodes <- tTest[[i]][["negNodeO"]]
+        posNodes <- tTest[[i]][["candNodeO"]]
+        dN <- unlist(Descendants(tree, negNodes, "tips"))
+        dP <- unlist(Descendants(tree, posNodes, "tips"))
+        d <- c(d,length(unique(dN)) == length(dN)) ## Neg nodes no sub branches
+        d <- c(d,length(unique(dP)) == length(dP)) ## Pos nodes no sub branches
+        d <- c(d,sum(sort(c(unique(dN),unique(dP))) != seq(length(tree$tip.label))) == 0) ## All tips are covered
+        vals[i] <- all(d)
+    }
+    print(vals)
 }
 
-for(i in seq_along(tAfter4))
-{
-    negNodes <- tAfter4[[i]][["negNodeO"]]
-    posNodes <- tAfter4[[i]][["candNodeO"]]
-    dN <- unlist(Descendants(tree, negNodes, "tips"))
-    dP <- unlist(Descendants(tree, posNodes, "tips"))
-    print(length(unique(dN)) == length(dN)) ## Neg nodes no sub branches
-    print(length(unique(dP)) == length(dP)) ## Pos nodes no sub branches
-    
-    print(sum(sort(c(unique(dN),unique(dP))) != seq(length(tree$tip.label))) == 0) ## All tips are covered
-}
+sum(test(tBefore4)==3)
+sum(test(tAfter4)==3)
+sum(test(tBeforeNoStop)==3)
+sum(test(tAfterNoStop)==3)
 ```
 
 ### Statistics on  nodes
@@ -110,26 +140,66 @@ for(i in seq_along(tAfter4))
 ```{r}
 print(sapply(tBefore4, function(node) length(node[["candNodeO"]])))
 print(sapply(tAfter4, function(node) length(node[["candNodeO"]])))
+print(sapply(tBeforeNoStop, function(node) length(node[["candNodeO"]])))
+print(sapply(tAfterNoStop, function(node) length(node[["candNodeO"]])))
 ```
 
 #### Distribution of node levels (detected and not detected)
 ```{r}
 print(sapply(tBefore4, function(node) table(levels[node[["candNodeO"]]])))
+print(sapply(tBeforeNoStop, function(node) table(levels[node[["candNodeO"]]])))
+
 print(sapply(tAfter4, function(node) table(levels[node[["candNodeO"]]])))
+print(sapply(tAfterNoStop, function(node) table(levels[node[["candNodeO"]]])))
 
 print(sapply(tBefore4, function(node) table(levels[node[["negNodeO"]]])))
+print(sapply(tBeforeNoStop, function(node) table(levels[node[["negNodeO"]]])))
+
 print(sapply(tAfter4, function(node) table(levels[node[["negNodeO"]]])))
+print(sapply(tAfterNoStop, function(node) table(levels[node[["negNodeO"]]])))
 ```
 
 #### Distributions of nodes based on treeClimbR
 ```{r}
-load("environment/whole_txp/bSwish.RData")
 nodes <- sapply(bSwish, function(sw) sw$output[sw$output$signal.node, "node"])
 print(sapply(nodes, function(node) table(levels[node])))
 ```
-
 treeClimbR has the maximum number of innner nodes followed by treeTerm - before and -after
 
+```{r}
+nNodes <- tBeforeNoStop[[2]][["negNodeO"]]
+# print(length(nNodes))
+# anc <- Ancestors(tree, nNodes, "parent")
+# print(sum(anc == (nrow(y)+1)))
+# anc <- anc[anc != nrow(y)+1]
+# print(length(anc))
+# desc <- Descendants(tree, anc, "children")
+# diffs <- sapply(seq_along(desc), function(i) mIRV[anc[[i]]] - mean(mIRV[desc[[i]]]))
+# sum(diffs > termSwimThresh)
+# signs <- computeSign(yAll, "condition")
+sum(tBeforeNoStop[[2]][["resDf"]][nNodes,"adj_pvalue"] > 0.05)
+posNodes <- tBeforeNoStop[[2]][["candNodeO"]]
+#posNodes <- tBefore4[[2]][["candNodeO"]]
+mIRV <- mcols(yAll)[["meanInfRV"]]
+posNodes <- posNodes[posNodes > nrow(y)]
+descA <-  Descendants(tree, posNodes, "all")
+descC <-  Descendants(tree, posNodes, "child")
+sum(!sapply(descA, function(x) mean(tBeforeNoStop[[2]][["resDf"]][x[[1]],"adj_pvalue"] >= 0.05)==1)) == 0 ## all descendants non signficant
+# print(sum(!sapply(descA, function(x) all(signs[x] >= 0) | all(signs[x] <= 0)))) ## all descendants non signficant
+diffs <- sapply(seq_along(descC), function(i) mIRV[posNodes[i]] - mean(mIRV[descC[[i]]])) #signficant
+print(sum(diffs > termSwimThresh))
+
+```
+All neg nodes have adjpvalues > 0.05
+9 pos nodes have txps of varying signs and 19 do not meet the initial infRV criteria
+
+```{r}
+candNodeB <- tBefore4[[2]][["candNodeO"]]
+candNodeBNS <- tBeforeNoStop[[2]][["candNodeO"]]
+print(length(intersect(candNodeBNS, candNodeBNS)))
+anc <- Ancestors(tree,candNodeB)
+print(sum(sapply(anc, function(a) sum(a %in% candNodeBNS) > 0)))
+```
 #### Other Variations to run upon
 varying pvalues, different stopping criteria based on IVAR, no stopping criteria based on infRV
-run on entire tree, only tree, different IHW criteria, varying signs, clarifying 
+run on entire tree, only tree, different IHW criteria, varying signs, clarifying
