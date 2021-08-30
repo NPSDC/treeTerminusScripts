@@ -17,17 +17,31 @@ suppressPackageStartupMessages(library(SummarizedExperiment))
 suppressPackageStartupMessages(library(DESeq2))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(library(biomaRt))
+suppressPackageStartupMessages(library(GenomicFeatures))
 metaData <- read.delim("/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/SYNAPSE_METADATA_MANIFEST.tsv")
 quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/out_sal"
 samples <- sapply(strsplit(metaData[,"path"], split = "/", fixed = T), function(x) x[[length(x)]])
 samples <- sapply(strsplit(samples, ".", fixed = T), function(x) x[[1]])
 files <- file.path(quantDir, samples, "quant.sf")
 colData <- cbind(data.frame(files = files, names = samples), metaData)
-colData[["condition"]] <- ifelse(colData[["tissue"]] == "cerebellum", "Cere", "Rest")
+colData[["condition"]] <- as.factor(ifelse(colData[["tissue"]] == "cerebellum", "Cere", "Rest"))
+
 # seChimp <- tximeta::tximeta(colData)
-# save(seChimp, file = "environment/Chimp/se_chimp.RData")
+
 load("environment/Chimp/se_chimp.RData")
-colData(seChimp)[["condition"]] <- as.factor(colData[["condition"]])
+
+#### Add gene annotation, since that could not be found by tximeta
+# listDatasets(ensembl)
+# ensembl = useMart("ensembl")
+# ensembl = useDataset("ptroglodytes_gene_ensembl", mart=ensembl) ##version 3.0
+txdb <- makeTxDbFromGFF(file="/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.104.gtf.gz")
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+tnames <- sapply(strsplit(rownames(seChimp), split=".", fixed=T), function(x) x[1])
+names(tnames) <- rownames(seChimp)
+rowData(seChimp) <- tx2gene[match(tnames[rownames(seChimp)], tx2gene[,"TXNAME"]),]
+# save(seChimp, file = "environment/Chimp/se_chimp.RData")
 ```
 
 ### Some statistics
@@ -45,7 +59,7 @@ print(sum(apply(assays(seChimp)[["counts"]], 1, function(x) sum(x != 0) == 4)))
 
 #### PCA
 ```{r}
-sampDorNucl <- colData %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% select(names) %>% unlist
+sampDorNucl <- colData %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% dplyr::select(names) %>% unlist
 dds <- DESeqDataSet(seChimp, design=~tissue)
 dds <- estimateSizeFactors(dds)
 dds <- dds[rowSums(assays(seChimp)[["counts"]]) > 10,]

@@ -1,0 +1,74 @@
+---
+title: "Read Trees"
+author: "Noor Pratap Singh"
+date: "8/18/2021"
+output: html_document
+---
+
+This file reads the tree terminus output of running on Chimpanzee bulk data and preparing the bulk and tree output accordingly
+Using output from read_sal, where we have seen the existence of batch effects and we also removed medial dorsal nucleus of thalmus samples for the analysis
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/cbcb_rob/Uncertainity/treeTerminusScripts')
+```
+
+#### Reading the nwk tree
+```{r}
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(sva))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(ggplot2))
+source("tree_helper_function.R")
+load("environment/Chimp/se_chimp.RData")
+trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/terminus/cluster_nwk.txt")
+tLengths <- sapply(trees, function(x) length(x$tip.label))
+print(length(tLengths))
+print(max(tLengths))
+print(sum(tLengths >= 10))
+tree <- mergeTree(trees, se = seChimp)
+print(tree)
+save(tree, file="environment/Chimp/tree.RData")
+```
+Only 14 groups with total number of txps >= 10. Max group length is 14 with total number of groups 5794. A total of 15420 txps covered by tree with 9435 internal nodes
+
+#### Processing the data running swish
+```{r}
+# sampDorNucl <- data.frame(colData(seChimp)) %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% dplyr::select(names) %>% unlist
+# y <- labelKeep(seChimp[,!(colnames(seChimp) %in% sampDorNucl)])
+# tnames <- union(tree$tip.label, rownames(y)[mcols(y)$keep])
+# y <- y[tnames,]
+# mcols(y)[,'keep'] <- TRUE
+# dds <- DESeqDataSet(y, design=~condition)
+# dds <- estimateSizeFactors(dds)
+# mm <- model.matrix(~ condition, colData(dds))
+# mm0 <- model.matrix(~ 1, colData(dds))
+# 
+# norm.cts <- counts(dds, normalized=TRUE)
+# norm.cts <- norm.cts[rowSums(norm.cts) > 0,]
+# fit <- svaseq(norm.cts, mod=mm, mod0=mm0, n.sv=2)
+# df <- data.frame(SV1=fit$sv[,1], SV2=fit$sv[,2], cond = colData(dds)[,"condition"], indID = colData(dds)[,"individualID"])
+# ggplot(df, aes(SV1, SV2, color=indID)) + geom_point()
+# 
+# # y <- corrBESwish(y, sampDorNucl, fit) ### Correcting for batch effects
+# yU <- mergeLeaves(tree, y)
+# tree <- yU[[1]]
+# y <- yU[[2]]
+# rm(yU)
+# gc()
+# hist(mcols(yAll)[["pvalue"]])
+# y <- computeInfRV(y)
+# save(y, file = "environment/Chimp/yrem_swish.RData")
+# save(tree, file="environment/Chimp/tree.RData")
+```
+
+#### Preparing yAll
+```{r}
+# yAll <- prepSwish(tree, y)
+# yAll <- scaleInfReps(yAll, lengthCorrect = T)
+# yAll <- labelKeep(yAll)
+# mcols(yAll)$keep=T
+# yAll <- swish(yAll, x = "condition")
+# yAll <- computeInfRV(yAll)
+# hist(mcols(yAll)[["pvalue"]])
+# save(yAll, file = "environment/Chimp/yAll.RData")
+```
