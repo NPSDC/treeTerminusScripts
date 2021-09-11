@@ -4,3 +4,6 @@ environment
 *.log
 *.tex
 *.pdf
+*.out
+slurm*
+*/snake*/.snake*

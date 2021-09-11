@@ -1,0 +1,15 @@
+{
+    "bed_path":"/fs/cbcb-lab/rob/students/noor/bedtools2/bin",
+    "bam_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/bam",
+    "fastq_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/fastq",
+    "out_sal":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/out_sal",
+    "ind_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind",
+    "chimp_genome_fa":"Pan_troglodytes.Pan_tro_3.0.dna_sm.toplevel.fa.gz",
+    "chimp_cdna_fa":"Pan_troglodytes.Pan_tro_3.0.cdna.all.fa.gz",
+    "chimp_ncrna_fa":"Pan_troglodytes.Pan_tro_3.0.ncrna.fa.gz",
+    "fastqc_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/fastqc",
+    "multiqc_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/multiqc",
+    "term_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/terminus",
+    "out_term":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/terminus",
+    "out_term_no_thresh":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/terminus_no_thresh"
+}
