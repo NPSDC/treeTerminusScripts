@@ -77,7 +77,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
             if(diff <= infDiff)
             #if(pIRV >= infDiff)
                 return(T)
-            print("irv")
+            #print("irv")
             return(F)
         }
         else
@@ -116,7 +116,7 @@ doIHW <- function(y, tree, alpha, nbins=40, inds = NULL)
     for(i in seq_along(d))
         #folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")))] <- i
         folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")),d2[[i]])] <- i
-    print(table(folds))
+    # print(table(folds))
     if(!is.null(inds))
     {
         if(!is.logical(inds) | length(inds) != nrow(y))
@@ -157,10 +157,10 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
     }
     else
     {
-        # nSol <- runTreeTermAlpha(tree, y, cond, infDiff, mcols(y)[["pvalue"]], alphas, alphas)
-        nSol <- mclapply(alphas, function(alpha) {
-            runTreeTermAlpha(tree, y, cond, infDiff, mcols(yAll)[["pvalue"]], alpha, alpha, cSign = cSign)
-        }, mc.cores = cores)
+        nSol <- runTreeTermAlpha(tree, y, cond, infDiff, mcols(y)[["pvalue"]], pCutOff, pChild)
+        # nSol <- mclapply(alphas, function(alpha) {
+        #     runTreeTermAlpha(tree, y, cond, infDiff, mcols(yAll)[["pvalue"]], alpha, alpha, cSign = cSign)
+        # }, mc.cores = cores)
         resAlphas <- lapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[["nodesLooked"]]))
         resDfs <- mclapply(resAlphas, function(res) 
             {
@@ -170,24 +170,24 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
             }, mc.cores = cores)
         for(i in seq_along(alphas)) {
             sols[[i]][["candNodeO"]] <- intersect(which(nSol[["candNode"]]), resDfs[[i]][resDfs[[i]]$adj_pvalue <= alphas[i],"inds"])
-           # remNegNodes <- setdiff(which(nSol[["candNode"]]), sols[[i]][["candNodeO"]])
-            remNegNodes <- setdiff(which(nSol[[i]][["candNode"]]), sols[[i]][["candNodeO"]])
+            remNegNodes <- setdiff(which(nSol[["candNode"]]), sols[[i]][["candNodeO"]])
+            # remNegNodes <- setdiff(which(nSol[[i]][["candNode"]]), sols[[i]][["candNodeO"]])
             if(sum(sols[[i]][["negNode"]][remNegNodes]) > 0)
                 stop("Incorrect neg nodes ")
             # sols[[i]][["negNode"]] <- nSol[["negNode"]]
-            sols[[i]][["negNode"]] <- nSol[[i]][["negNode"]]
+            sols[[i]][["negNode"]] <- nSol[["negNode"]]
             sols[[i]][["negNode"]][remNegNodes] <- T
             sols[[i]][["negNodeO"]] <- which(sols[[i]][["negNode"]])
         }
-        # nSol <- list(nSol)
+        nSol <- list(nSol)
     }
     for(i in seq_along(alphas))
     {
         j = i
         sols[[i]][["resIHW"]] <- resAlphas[[i]]
         sols[[i]][["resDf"]] <- resDfs[[i]]
-        # if(ihwType=="a")
-        #     j=1
+        if(ihwType=="a")
+            j=1
         sols[[i]][["nodesLooked"]] <- nSol[[j]][["nodesLooked"]]
         sols[[i]][["candNode"]] <- nSol[[j]][["candNode"]]
     }

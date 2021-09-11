@@ -8,6 +8,33 @@ library(TreeSummarizedExperiment)
 library(parallel)
 library(DESeq2)
 
+### Correcting for batch effects
+corrBESwish <- function(se, samples, fit)
+{
+  y <- se[,!(colnames(se) %in% samples)]
+  print(dim(y))
+  y <- scaleInfReps(y, saveMeanScaled=TRUE)
+  print(dim(y))
+  
+  infRepIdx <- grep("infRep",assayNames(y),value=TRUE)
+  nreps <- length(infRepIdx)
+  
+  mm <- model.matrix(~condition, colData(y))
+  
+  pc <- .1
+  for (k in seq_len(nreps)) {
+    logInfRep <- log(assay(y, infRepIdx[k]) + pc)
+    logInfRep <- limma::removeBatchEffect(
+      logInfRep,
+      covariates=fit[["sv"]],
+      design=mm)
+    assay(y, infRepIdx[k]) <- exp(logInfRep)
+  }
+  gc()
+  y <- swish(y, x="condition")
+  y
+}
+
 ## Given a tree of phylo, convert it into a data frame needed by BOUTH or treeRowData
 getTreeDf <- function(tree) {
     nleaves <- length(tree$tip.label)

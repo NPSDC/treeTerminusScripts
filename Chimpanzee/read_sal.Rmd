@@ -27,20 +27,26 @@ files <- file.path(quantDir, samples, "quant.sf")
 colData <- cbind(data.frame(files = files, names = samples), metaData)
 colData[["condition"]] <- as.factor(ifelse(colData[["tissue"]] == "cerebellum", "Cere", "Rest"))
 
-# seChimp <- tximeta::tximeta(colData)
+#### Add gene annotation, since that could not be found by tximeta
+indDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/sal_ind/"
+fastaPath <- c("/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.cdna.all.fa.gz",
+           "/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.ncrna.fa.gz")
+gtfPath <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.104.gtf.gz"
+makeLinkedTxome(indexDir=indDir, source="ensembl", organism="Pan Troglodytes",
+                release="104", genome="panTro3", fasta=fastaPath, gtf=gtfPath, write=T)
 
+# seChimp <- tximeta::tximeta(colData)
 load("environment/Chimp/se_chimp.RData")
 
-#### Add gene annotation, since that could not be found by tximeta
-# listDatasets(ensembl)
-# ensembl = useMart("ensembl")
-# ensembl = useDataset("ptroglodytes_gene_ensembl", mart=ensembl) ##version 3.0
-txdb <- makeTxDbFromGFF(file="/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.104.gtf.gz")
-k <- keys(txdb, keytype = "TXNAME")
-tx2gene <- select(txdb, k, "GENEID", "TXNAME")
-tnames <- sapply(strsplit(rownames(seChimp), split=".", fixed=T), function(x) x[1])
-names(tnames) <- rownames(seChimp)
-rowData(seChimp) <- tx2gene[match(tnames[rownames(seChimp)], tx2gene[,"TXNAME"]),]
+mapDf <- data.frame(txp=rownames(seChimp), ind=seq(nrow(seChimp)))
+save(mapDf, file = "environment/Chimp/mapDf.Rdata")
+
+# txdb <- makeTxDbFromGFF(file="/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.104.gtf.gz")
+# k <- keys(txdb, keytype = "TXNAME")
+# tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+# tnames <- sapply(strsplit(rownames(seChimp), split=".", fixed=T), function(x) x[1])
+# names(tnames) <- rownames(seChimp)
+# rowData(seChimp) <- tx2gene[match(tnames[rownames(seChimp)], tx2gene[,"TXNAME"]),]
 # save(seChimp, file = "environment/Chimp/se_chimp.RData")
 ```
 

@@ -1,0 +1,101 @@
+---
+title: "Explore infRV collapse"
+author: "Noor Pratap Singh"
+date: "9/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Library
+```{r}
+suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+load("environment/Chimp/yrem_swish.RData")
+```
+
+```{r}
+get_infRV <- function(counts, pc = 5, shift = 0.01)
+{
+    v <- var(counts)
+    m <- mean(counts)
+    infrv <- max(v-m, 0)/(m+pc) + shift
+    return(infrv)
+}
+
+get_collapse_score <- function(infReps, s_ind, t1, t2, pc = 5, shift = 0.01)
+{
+    inf1 <- get_infRV(infReps[t1, s_ind, ], pc = pc, shift = shift)
+    inf2 <- get_infRV(infReps[t2, s_ind, ], pc = pc, shift = shift)
+    combCounts <- colSums(infReps[c(t1, t2), s_ind, ])
+    infC <- get_infRV(combCounts, pc = pc, shift = shift)
+    
+    infC - (inf1+inf2)*0.5
+}
+
+
+do_sampling <- function(infReps, s_ind = 1, n_samp = 100)
+{
+    tinds <- sample(dim(infReps)[1], n_samp*2, replace = F)
+    t1 <- tinds[1:n_samp]
+    t2 <- tinds[n_samp + 1:n_samp]
+    
+    col_scores <- sapply(seq_along(t1), function(i) get_collapse_score(infReps, s_ind, t1[i], t2[i]))
+    return(col_scores)
+}
+
+get_norm_quant <- function(samples) {
+    cent_samp <- samples - mean(samples)
+    thr <- mean(samples) - median(cent_samp[cent_samp > 0]) * 1.48 * 1.95
+    return(thr)
+}
+```
+
+```{r fig.width=8, fig.height=12}
+infReps <- assays(y)[grep("infRep", assayNames(y))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+
+nsamp <- c(100,200,500,1000,2000,3000)
+nvar <- 5
+# for(n in nsamp)
+# {
+#     samp_inds <- sample(dim(infReps)[2], nvar, replace = T)
+#     s_samples <- lapply(samp_inds, function(ind) do_sampling(infReps, n_samp = n, s_ind = ind))
+#     par(mfrow=c(3,2))
+#     for(i in seq_along(s_samples))
+#         hist(s_samples[[i]])
+#     par(mfrow=c(3,2))
+#     thrs <- c()
+#     for(i in seq_along(s_samples))
+#     {
+#         qqnorm(s_samples[[i]])
+#         thrs <- c(thrs, paste(paste("normal", round(get_norm_quant(s_samples[[i]]),3), sep = " "), paste("emperical", round(quantile(s_samples[[i]], 0.025), 3), sep = " "), sep = ","))
+#     }
+#     print(thrs)
+# }
+for(n in nsamp)
+{
+    samp_inds <- sample(dim(infReps)[2], nvar, replace = T)
+    s_samples <- lapply(samp_inds, function(ind) do_sampling(infReps, n_samp = n, s_ind = ind))
+    par(mfrow=c(3,2))
+    for(i in seq_along(s_samples)) {
+        x <- s_samples[[i]]
+        hist(x[abs(x) < 3 * mad(x)], breaks = 40)
+    }
+        
+    par(mfrow=c(3,2))
+    thrs <- c()
+    for(i in seq_along(s_samples))
+    {
+        x <- s_samples[[i]]
+        qqnorm(x[abs(x) < 3 * mad(x)])
+        qqline(x[abs(x) < 3 * mad(x)])
+        # thrs <- c(thrs, paste(paste("normal", round(get_norm_quant(s_samples[[i]]),3), sep = " "), paste("emperical", round(quantile(s_samples[[i]], 0.025), 3), sep = " "), sep = ","))
+    }
+    print(thrs)
+}
+
+```
