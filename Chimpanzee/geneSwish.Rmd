@@ -1,0 +1,65 @@
+---
+title: "Gene level differential"
+author: "Noor Pratap Singh"
+date: "8/31/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading data
+```{r}
+suppressPackageStartupMessages(library(tximeta))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(sva))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/Chimp/se_chimp.RData")
+```
+
+#### Gene Level Swish
+```{r}
+gy <- summarizeToGene(seChimp)
+print(gy)
+dds <- DESeqDataSet(gy, design=~tissue)
+dds <- estimateSizeFactors(dds)
+dds <- dds[rowSums(assays(gy)[["counts"]]) > 10,]
+print(dds)
+vsd <- vst(dds)
+
+plotPCA(vsd, intgroup=c("tissue"), ntop=1000)
+plotPCA(vsd, intgroup=c("individualID"), ntop=1000)
+```
+
+#### Correcting for batch effects
+```{r}
+sampDorNucl <- data.frame(colData(gy)) %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% dplyr::select(names) %>% unlist
+gy <- labelKeep(gy[,!(colnames(gy) %in% sampDorNucl)])
+gy <- gy[mcols(gy)$keep,]
+
+dds <- DESeqDataSet(gy, design=~condition)
+dds <- estimateSizeFactors(dds)
+mm <- model.matrix(~ condition, colData(dds))
+mm0 <- model.matrix(~ 1, colData(dds))
+
+norm.cts <- counts(dds, normalized=TRUE)
+norm.cts <- norm.cts[rowSums(norm.cts) > 0,]
+fit <- svaseq(norm.cts, mod=mm, mod0=mm0, n.sv=2)
+df <- data.frame(SV1=fit$sv[,1], SV2=fit$sv[,2], cond = colData(dds)[,"condition"], indID = colData(dds)[,"individualID"])
+ggplot(df, aes(SV1, SV2, color=indID)) + geom_point()
+```
+
+#### Running swish
+```{r}
+gy <- corrBESwish(gy, sampDorNucl, fit) ### Correcting for batch effects
+gy <- computeInfRV(gy)
+hist(mcols(gy)[["pvalue"]])
+save(gy, file = "environment/Chimp/gy.RData")
+print(sapply(c(0.01, 0.05, 0.1), function(x) sum(mcols(gy)[["qvalue"]] < x)))
+```
