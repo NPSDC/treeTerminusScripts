@@ -1,0 +1,296 @@
+### Adapted from
+### https://gist.github.com/mikelove/5a8134e57f652f970f1a176efc900cbe
+### https://www.sichong.site/2020/02/25/snakemake-and-slurm-how-to-manage-workflow-with-resource-constraint-on-hpc/
+
+import yaml
+import pandas as pd
+
+with open('cluster_partition.conf', 'r') as f:
+    partitions = yaml.safe_load(f)
+
+def get_partition(rule_name):
+    return partitions[rule_name] if rule_name in partitions else partitions['__default__']
+
+df = pd.read_csv("SYNAPSE_METADATA_MANIFEST.tsv", sep = '\t')
+bam_files = df[df["tissue"]!="medial dorsal nucleus of thalamus"]["path"].values
+up_runs = list(map(lambda x:x.split("/")[-1].split(".")[0], bam_files)) ##removing medial dorsal samples
+
+df_mod = df[df['path'].isin( bam_files)]
+samp_names=df.apply(lambda x:x['path'].split("/")[-1].split(".")[0], axis=1)
+df_mod = df_mod.assign(samp_name=samp_names)
+df_mod['group'] = df_mod['tissue'].apply(lambda x: "C1" if x == "cerebellum" else "C2")
+df_mod=df_mod[['samp_name', 'group', 'individualID']]
+path="/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/leafcutter/groups.txt"
+#df_mod.to_csv(path, sep = " ", header = False, index = False)
+
+configfile:
+    "config.json"
+
+rule all:
+    input: expand(config['leaf_out_path'] + "/{sample}.junc", sample=up_runs),
+
+rule star_index:
+    input: 
+        fasta=config['chimp_genome_fa'],
+        gtf=config['chimp_gtf']
+    output:config['star_index'] + "/sjdbInfo.txt"
+    params:
+        star_ind=config["star_index"],
+        partition = get_partition('star_index')
+    resources:mem_mb=100000, cpus=6,time=5000,mem=100000
+    shell:
+        """
+        module load star/2.7.2b
+        STAR --runThreadN 4 --runMode genomeGenerate --genomeDir {params.star_ind} --genomeFastaFiles {input.fasta} \
+        --sjdbGTFfile {input.gtf} --sjdbOverhang 100 --limitGenomeGenerateRAM 39148961152
+        """
+
+rule star_alignment:
+    input: config['fastq_path'] + "/{sample}.fastq"
+    output: config['star_bam'] + "/{sample}.Aligned.out.bam"
+    params:
+        star_ind=config["star_index"] + "/",
+        partition = get_partition('star_alignment'),
+        out = config['star_bam'] + "/{sample}." 
+    resources:mem_mb=100000, cpus=6,time=5000,mem=100000
+    shell:
+        """
+        module load star/2.7.2b
+        STAR --runThreadN 6 --genomeDir {params.star_ind} --twopassMode Basic --outSAMstrandField intronMotif \
+        --outFileNamePrefix {params.out} --readFilesIn {input} --outSAMtype BAM Unsorted
+        """
+rule run_regtools:
+    input:config['star_bam'] + "/{sample}.Aligned.out.bam"
+    output:config['leaf_out_path'] + "/{sample}.junc"
+    params:
+        partition = get_partition('run_regtools'),
+        reg_path = config["regtools_path"],
+        junc_file = config['leaf_out_path'] + "/juncfiles.txt",
+        temp = lambda w: "{}.sorted.bam".format(w.sample)
+    shell:
+        """
+            module load samtools/1.7
+            samtools sort {input} -o {params.temp}
+            samtools index {params.temp}
+            export PATH=$PATH:{params.reg_path}
+            regtools junctions extract -a 8 -m 50 -M 500000 {params.temp} -o {output} -s 0
+            rm {params.temp}
+            echo {output} >> {params.junc_file}
+        """
+### Make changes in the python code as suggested by
+### https://github.com/davidaknowles/leafcutter/issues/197
+rule run_intron_clustering:
+    input: config['leaf_out_path'] + "/juncfiles.txt"
+    output: config['leaf_out_path'] + "/C1vC2_perind_numers.counts.gz"
+    params:
+        partition = get_partition('run_regtools'),
+        clust_file = config["leaf_source_path"] + "/clustering/leafcutter_cluster_regtools.py",
+        #out = config['leaf_out_path'] + "/C1vC2"
+        out = config['leaf_out_path']
+    shell:
+        """
+            module load Python2/2.7.9
+            python {params.clust_file} -j {input} -m 50 -o C1vC2 -l 500000
+            mv C1vC2* {params.out}
+        """
+
+### modifying the gtf by deleting top headers
+### modifying script, replacing zcat with cat (I have gtf not gtf.gz)
+### also adding gene_id (replacing gene_name with gene_id)
+rule write_exon:
+    input: config['leaf_out_path'] + "/C1vC2_perind_numers.counts.gz"
+    output: config['leaf_out_path'] + "/mod_gtf.txt.gz"
+    params:
+        partition = get_partition('write_exon'),
+        gtf = config["chimp_gtf_mod"],
+        script_path = config["leaf_source_path"] + "/scripts/gtf_to_exons.R"
+    shell:
+        """
+            source ~/.bashrc
+            conda activate R4.1
+            {params.script_path} {params.gtf} {output}
+        """
+
+rule run_leaf:
+    input:config['leaf_out_path'] + "/leafcutter_ds_cluster_significance.txt"
+
+
+rule run_diff:
+    input:
+        groups = config['leaf_out_path'] +  "/groups.txt"
+    output:
+        f1 = config['leaf_out_path'] + "/leafcutter_ds_cluster_significance.txt",
+        f2 = config['leaf_out_path'] + "/leafcutter_ds_effect_sizes.txt",
+    params:
+        partition = get_partition('run_diff'),
+        counts = config['leaf_out_path'] + "/C1vC2_perind_numers.counts.gz",
+        group_file = config['leaf_out_path'] + "/C1vC2_perind_numers.counts.gz",
+        script_path = config["leaf_source_path"] + "/scripts/leafcutter_ds.R",
+        exon_gtf = config['leaf_out_path'] + "/mod_gtf.txt.gz"
+        f1 = "leafcutter_ds_cluster_significance.txt"
+        f2 = "leafcutter_ds_effect_sizes.txt"
+        p1 = config["leaf_out_path"] + "/" + f1
+        p2 = config["leaf_out_path"] + "/" + f2
+    shell:
+        """
+            source ~/.bashrc
+            conda activate R4.1
+            {params.script_path} --num_threads 4 {params.counts} {input.groups} --exon_file {params.exon_gtf}
+            mv f1 p1
+            mv f2 p2
+        """
+        
+# RUNS, = glob_wildcards(config['bam_path'] + "/{run}.bam")
+
+# rule all:
+#     input: config['multiqc_path'] + "/multiqc_report.html"
+
+# rule conv_bam:
+#     input:
+#         inp_bam = config['bam_path'] + "/{sample}.bam"
+#     output:
+#         out_fastq = config['fastq_path'] + "/{sample}.fastq"
+#     params:
+#         bed_path = config['bed_path'],
+#         partition = get_partition('conv_bam')
+#     shell:
+#         """
+#             export PATH=$PATH:{params.bed_path}
+#             bamToFastq -i {input.inp_bam} -fq {output.out_fastq}
+#         """
+
+# rule build_sal_ind:
+#     input:
+#         inp_whole_fasta = config['ind_path'] + "/" + config['chimp_genome_fa'],
+#         inp_whole_cdna = config['ind_path'] + "/" + config['chimp_cdna_fa'],
+#         inp_whole_ncrna = config['ind_path'] + "/" + config['chimp_ncrna_fa']
+        
+#     output:
+#         config['ind_path'] + "/sal_ind/pos.bin"
+#     params:
+#         ind_path = config['ind_path'],
+#         inp_sal_ind = config['ind_path'] + "/sal_ind",
+#         partition = get_partition('build_sal_ind')
+#     resources:cpus=10, mem=32000
+#     conda:
+#         "env.yml"
+#     shell:
+#         """
+#             grep "^>" <(gunzip -c {input.inp_whole_fasta}) | cut -d " " -f 1 > decoys.txt
+#             sed -i.bak -e 's/>//g' decoys.txt
+#             cat {input.inp_whole_cdna} {input.inp_whole_ncrna} {input.inp_whole_fasta} > gentrome.fa.gz
+#             salmon index -t gentrome.fa.gz -d decoys.txt -p {resources.cpus} -i {params.inp_sal_ind} --gencode
+#             rm decoys.txt gentrome.fa.gz
+#         """
+
+# rule run_salmon:
+#     input:
+#         inp_fastq = config['fastq_path'] + "/{sample}.fastq"
+#     output:
+#         out_sal = config['out_sal'] + "/{sample}/quant.sf"
+#     resources: cpus=10, mem=32000
+#     params:
+#         out_dir = config['out_sal'] + "/{sample}",
+#         index = config['ind_path'] + "/sal_ind",
+#         partition = get_partition('run_salmon')
+#         #partition = "throughput"
+#     conda:
+#         "env.yml"
+#     shell:
+#         "salmon quant -i {params.index} -l A -p {resources.cpus} --gcBias "
+#         "--numGibbsSamples 100 --thinningFactor 100 -d "
+#         "-o {params.out_dir} -r {input.inp_fastq}"
+
+# rule fastqc:
+#     input:
+#         inp_fastq = config['fastq_path'] + "/{sample}.fastq"
+#     output:
+#         config['fastqc_path'] + "/{sample}/{sample}_fastqc.html"
+#     resources: cpus=10
+#     params:
+#         dir = config['fastqc_path'] + "/{sample}",
+#         partition = get_partition('fastqc')
+#     shell:
+#         """
+#             module load fastqc
+#             fastqc --quiet -t {resources.cpus} --outdir {params.dir} {input}
+#         """
+
+# rule multiqc:
+#     input:
+#         expand([config['out_sal'] + "/{run}/quant.sf",
+#                 config['fastqc_path'] + "/{run}/{run}_fastqc.html"],
+#                run=RUNS)
+#     output:
+#         config['multiqc_path'] + "/multiqc_report.html"
+#     params:
+#         partition = get_partition('multiqc'),
+#         output = config['multiqc_path']
+#     shell:
+#         """
+#             module load multiqc
+#             multiqc . -o {params.output}
+#         """
+
+# import pandas as pd
+# df = pd.read_csv("SYNAPSE_METADATA_MANIFEST.tsv", sep = '\t')
+# bam_files = df[df["tissue"]!="medial dorsal nucleus of thalamus"]["path"].values
+# up_runs = list(map(lambda x:x.split("/")[-1].split(".")[0], bam_files)) ##removing medial dorsal samples
+
+# rule run_terminus:
+#     input:
+#         #p1 = expand(config['out_term_no_thresh'] + "/{run}/groups.txt", run=up_runs),
+#         p2 = config['out_term_no_thresh'] + "/cluster_nwk.txt"
+#     params:
+#         partition = get_partition('run_terminus')
+
+
+# rule run_term_group:
+#     input:
+#         config['out_sal'] + "/{run}/quant.sf"
+#     output:
+#         config['out_term_no_thresh'] + "/{run}/groups.txt"
+#     params:
+#         term_path=config["term_path"] + "/target/release/terminus",
+#         partition = get_partition('run_term_group'),
+#         output = config['out_term_no_thresh'],
+#         input = config['out_sal'] + "/{run}"
+#     shell:
+#         "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output} --thr false"
+
+
+# rule create_temp:
+#     input:
+#         config['out_term_no_thresh'] + "/{run}/groups.txt"
+#     output:
+#         #directory(config['out_sal'] + "/temp")
+#         config['out_sal'] + "/temp/{run}/quant.sf"
+#     params:
+#        input = config['out_sal'] + "/{run}",
+#        output = config['out_sal'] + "/temp/",
+#        partition = get_partition('create_temp')
+#     shell:
+#         """
+#             mv {params.input} {params.output}
+#         """
+
+# rule run_term_collapse:
+#     input:
+#         expand(config['out_sal'] + "/temp/{run}/quant.sf", run=up_runs),
+        
+#     output:
+#         config['out_term_no_thresh'] + "/cluster_nwk.txt"
+#     params:
+#         term_path=config["term_path"],
+#         output = config['out_term_no_thresh'],
+#         temp = config['out_sal'] + "/temp",
+#         orig = config['out_sal'],
+#         partition = get_partition('run_term_collapse')
+#     shell:
+#         """
+#             cd {params.term_path}
+#             target/release/terminus collapse -c 0 -d {params.temp} -o {params.output} -m true --merge_type phylip
+#             cd -
+#             mv {params.temp}/* {params.orig}
+#             rm -rf {params.temp}
+#         """

@@ -1,0 +1,22 @@
+{
+    "bed_path":"/fs/cbcb-lab/rob/students/noor/bedtools2/bin",
+    "bam_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/bam",
+    "star_bam":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/star_bam",
+    "fastq_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/fastq",
+    "out_sal":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/out_sal",
+    "ind_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind",
+    "chimp_genome_fa":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.dna_sm.toplevel.fa",
+    "chimp_cdna_fa":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.cdna.all.fa.gz",
+    "chimp_ncrna_fa":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.ncrna.fa.gz",
+    "regtools_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/Chimpanzee/leafcutter/regtools/build",
+    "leaf_out_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/leafcutter",
+    "leaf_source_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/Chimpanzee/leafcutter/leafcutter",
+    "chimp_gtf":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/Pan_troglodytes.Pan_tro_3.0.104.gtf",
+    "chimp_gtf_mod":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/pan_mod.gtf",
+    "star_index":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/refseq_ind/star_ind",
+    "fastqc_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/fastqc",
+    "multiqc_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/multiqc",
+    "term_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/terminus",
+    "out_term":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/terminus",
+    "out_term_no_thresh":"/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/terminus_no_thresh"
+}
