@@ -1,0 +1,125 @@
+---
+title: "Comp Leaf vs Tree Terminus Climb"
+author: "Noor Pratap Singh"
+date: "10/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/Chimp/t2GDf.RData")
+load("environment/Chimp/no_thresh/tAfter.RData")
+load("environment/Chimp/no_thresh/tree.RData")
+load("environment/Chimp/no_thresh/gg.RData")
+load("environment/Chimp/no_thresh/yAll.RData")
+load("environment/Chimp/no_thresh/y.RData")
+load("environment/Chimp/gy.RData")
+suppressPackageStartupMessages(library(dplyr))
+# gg <- getGeneGroup(tree, t2GDf)
+# save(gg, file = "environment/Chimp/no_thresh/gg.RData")
+
+
+degs <- rownames(gy)[mcols(gy)[["qvalue"]] <= 0.1]
+print(length(degs))
+dts <- rownames(y)[mcols(y)[["qvalue"]] <= 0.1]
+print(length(dts))
+ndtgs <- t2GDf[setdiff(rownames(y),dts),"gene_id"]##genes with no differential txp
+dtgs <- t2GDf[dts,"gene_id"] ## genes with differentially expressed txps
+ndtgs <- setdiff(ndtgs, dtgs)
+ndgedtgs <- intersect(setdiff(rownames(gy),degs), ndtgs) ## Genes that have neither dtes nor dges
+df1 <- read.delim("../ChimpData/leafcutter/leafcutter_ds_cluster_significance.txt")
+qcut = 0.1
+print(sum(df1[["p.adjust"]] <= qcut, na.rm=T))
+leafGenes <- df1 %>% filter(p.adjust <= qcut) %>% select(genes) %>% unlist %>% strsplit(split = ",", fixed = T)
+lGenes <- unique(unlist(leafGenes[sapply(leafGenes, length) == 1]))
+
+### Since a gene in leafcutter can contain multiple introns, mapping genes to introns. Further an intron can contain multiple genes
+df1 <- df1[!is.na(df1[["genes"]]),]
+gDf <- strsplit(df1[,"genes"], ",", fixed = T)
+gNames <- unique(unlist(gDf))
+
+geneLInds <- vector(mode="list", length(gNames))
+geneLInds <- lapply(gNames, function(g) which(df1[,"genes"]==g))
+names(geneLInds) <- unique(gNames)
+
+lg2inds <- which(sapply(gDf,length) >= 2) #inds within intron clusters that contain multiple genes
+for(i in lg2inds)
+{
+    genes <- gDf[[i]]
+    for(g in genes)
+        geneLInds[[g]] <- sort(c(geneLInds[[g]],i))
+}
+gMultiMapping <- unlist(gDf[lg2inds])
+
+cNodeA <- tAfter[["0.1"]][["candNodeO"]]  ##After
+cNodeAInn <- cNodeA[cNodeA >= length(tree$tip)] ## after inner nodes
+aInnGenes <- sapply(Descendants(tree, cNodeAInn, "tip"), function(txps) ## genes that map to these inner nodes
+    {
+        txps <- tree$tip[txps]
+        gs <- t2GDf[txps,"gene_id"]
+        if(length(unique(gs)) == 1)
+            unique(gs)
+        else
+            NA
+    })
+aIG <- aInnGenes[!is.na(aInnGenes)]
+
+### Only specific to leafcutter or treeTerminus and that have no dges or dtes
+lOnly <- setdiff(intersect(setdiff(lGenes, aIG), ndgedtgs), gMultiMapping) ### Also making sure that leaf genes that are output as a part of only 1 cluster and map to clusters that yields more than 1 gene
+print(length(lOnly))
+
+### Ordering them by qvalue
+lOnlyQ <- sapply(geneLInds[lOnly], function(x) min(df1[x,"p.adjust"], na.rm = T))
+lOnly <- lOnly[order(lOnlyQ)]
+
+aOnly <- intersect(setdiff(aIG, lGenes), ndgedtgs)
+print(length(aOnly))
+
+lNodes <- sapply(gg[lOnly],length)
+#order(lNodes, decreasing=T)
+dd <- tAfter[["0.1"]][["resDf"]]
+
+commGenes <- setdiff(intersect(intersect(lGenes, aIG), ndgedtgs), gMultiMapping)
+i=1
+print(i)
+```
+
+### Plotting leafcutter genes
+```{r}
+for(i in c(1:10,21,23,26,33,286,34))
+{
+    print(i)
+    print(paste("Plotting for gene", lOnly[i]))
+    plotGene(lOnly[i], yAll, gy, gg, tree, "sub_gene", dd[["inds"]])
+    plotGene(lOnly[i], yAll, gy, gg, tree, "txp", dd[["inds"]])
+    plotGene(lOnly[i], yAll, gy, gg, tree, "gene", dd[["inds"]])
+}
+```
+
+### Plotting tree terminus climber genes
+```{r}
+aOnly <- aOnly[order(sapply(aOnly, function(g) min(mcols(yAll)[gg[[g]], "qvalue"])))]
+for(i in c(1:10))
+{
+    print(paste("Plotting for gene", aOnly[i]))
+    plotGene(aOnly[i], yAll, gy, gg, tree, "sub_gene", dd[["inds"]])
+    plotGene(aOnly[i], yAll, gy, gg, tree, "txp", dd[["inds"]])
+    plotGene(aOnly[i], yAll, gy, gg, tree, "gene", dd[["inds"]])
+}
+```
+
+### Common Genes
+```{r}
+for(g in commGenes)
+{
+    print(paste("Plotting for gene", g))
+    plotGene(g, yAll, gy, gg, tree, "sub_gene", dd[["inds"]])
+    plotGene(g, yAll, gy, gg, tree, "txp", dd[["inds"]])
+    plotGene(g, yAll, gy, gg, tree, "gene", dd[["inds"]])
+}
+```

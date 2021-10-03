@@ -1,0 +1,400 @@
+---
+title: "Tree Terminus Analysis"
+author: "Noor Pratap Singh"
+date: "8/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading data
+```{r}
+suppressPackageStartupMessages(library(ape))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(tximeta))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(fishpond))
+trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/ChimpData/terminus_no_thresh/cluster_nwk.txt")
+load("environment/Chimp/no_thresh/yAll.RData")
+load("environment/Chimp/no_thresh/y.RData")
+load("environment/Chimp/gy.RData")
+load("environment/Chimp/no_thresh/tree.RData")
+load("environment/Chimp/se_chimp.RData")
+load("environment/Chimp/mapDf.Rdata")
+load("environment/Chimp/no_thresh/tBefore.RData")
+load("environment/Chimp/no_thresh/tAfter.RData")
+```
+
+#### Number of genes in each group
+```{r}
+t2GDf <- rowData(seChimp)[,c("tx_id", "gene_id")]
+gs <- sapply(trees, function(tree) 
+{ 
+    txps <- mapDf[as.numeric(tree$tip)+1, "txp"]
+    genes <- unique(t2GDf[txps, "gene_id"])
+})
+hist(sapply(gs, length))
+sum(sapply(gs, length)>1)
+max(sapply(gs, length))
+```
+While majority of the groups lie within the same gene, 1755 groups contain more than 1 gene with 1 group comprising of 14 genes.
+
+
+#### Number of txps that map to each gene
+```{r}
+g2T <- vector(mode = "list", length(unique(t2GDf[["gene_id"]])))
+names(g2T) <- unique(t2GDf[["gene_id"]])
+for(g in names(g2T))
+    g2T[[g]] <- t2GDf[["tx_id"]][t2GDf[["gene_id"]] == g]
+hist(sapply(g2T, length))
+```
+Most genes map to only 1 transcript.
+
+#### DEGs
+```{r}
+degs <- rownames(gy)[mcols(gy)[["qvalue"]] <= 0.1]
+print(length(degs))
+dts <- rownames(y)[mcols(y)[["qvalue"]] <= 0.1]
+print(length(dts))
+ndtgs <- t2GDf[setdiff(rownames(y),dts),"gene_id"]##genes with no differential txp
+ndtgs <- setdiff(ndtgs, degs)
+
+dgsNT <- degs[sapply(degs, function(g) sum(g2T[[g]] %in% dts) == 0)] ## Differential genes with no transcripts differentially expressed
+print(length(dgsNT))
+dgsNTAll <- unlist(g2T[dgsNT]) ## All txps belonging to degs that dont have differential expression
+print(length(dgsNTAll))
+sum(!dgsNTAll %in% rownames(y))
+
+dgsF <- unique(t2GDf[dgsNTAll[!dgsNTAll %in% rownames(y)],2]) ## Filtered genes with low counts
+dgsNF <- unique(t2GDf[dgsNTAll[dgsNTAll %in% rownames(y)],2]) ## Genes that still remain
+txp <- dgsNTAll[dgsNTAll %in% rownames(y)]
+plot(mcols(y)[txp,"log10mean"], mcols(y)[txp, "pvalue"])
+hist(log10(mcols(y)[txp,"meanInfRV"]))
+```
+
+9842 genes and 15253 transcripts that have a qvalue <= 0.1. Out of these 478 genes are such that do not have any differentially expressed transcripts and contain around 1500 txps. 18 out of these are filtered in the initial step by swish.
+
+
+#### Exploring cases where genes are DEs but it does not have any DTE but differential subgroups
+```{r}
+cNodeB <- tBefore[["0.1"]][["candNodeO"]] ##Before
+cNodeA <- tAfter[["0.1"]][["candNodeO"]]  ##After
+
+cNodeBInn <- cNodeB[cNodeB >= nrow(y)] ## before inner nodes
+cNodeAInn <- cNodeA[cNodeA >= nrow(y)] ## after inner nodes
+
+cNodeBInn <- cNodeBInn[order(mcols(yAll)[cNodeBInn, "qvalue"])] ##ordering them by qvalues
+cNodeAInn <- cNodeAInn[order(mcols(yAll)[cNodeAInn, "qvalue"])]
+
+txpA <- tree$tip[unlist(Descendants(tree, cNodeA, "tip"))]
+txpAInn <- tree$tip[unlist(Descendants(tree, cNodeAInn, "tip"))]
+
+print(paste(length(cNodeBInn), length(cNodeAInn), length(intersect(cNodeBInn, cNodeAInn))))
+
+bInnGenes <- sapply(Descendants(tree, cNodeBInn, "tip"), function(txps) ## genes that map to these inner nodes
+    {
+        txps <- rownames(y)[txps]
+        gs <- t2GDf[txps,"gene_id"]
+        if(length(unique(gs)) == 1)
+            unique(gs)
+        else
+            NA
+    })
+print(sum(is.na(bInnGenes)))
+print(length(intersect(bInnGenes, dgsNF)))
+
+aInnGenes <- sapply(Descendants(tree, cNodeAInn, "tip"), function(txps) ## genes that map to these inner nodes
+    {
+        txps <- rownames(y)[txps]
+        gs <- t2GDf[txps,"gene_id"]
+        if(length(unique(gs)) == 1)
+            unique(gs)
+        else
+            NA
+    })
+
+### Allowing multiple genes
+aInnGenesNNA <- sapply(Descendants(tree, cNodeAInn, "tip"), function(txps) ## genes that map to these inner nodes
+    {
+        txps <- rownames(y)[txps]
+        gs <- t2GDf[txps,"gene_id"]
+        unique(gs)
+    })
+print(sum(is.na(aInnGenes)))
+print(length(unlist(aInnGenesNNA)))
+print(length(unlist(aInnGenes)))
+print(length(intersect(aInnGenes, dgsNF)))
+
+print(length(intersect(aInnGenes, degs)))
+print(length(intersect(bInnGenes, degs)))
+```
+There is a overlap between these the two methods with 300 inner nodes common. Out of the 576 inner nodes yielded by before method, 53 map to more than 1 gene. On the other hand 315 nodes given by the after method, 26 map to more than 1 gene.
+
+We find 204 such genes for which there is no DTE but we find the sub gene level differential expression using before, while we have 144 such genes for after.
+
+Further, there is an  overall intersection between of 216 and 350 with genes associated with inner nodes and total degs.
+
+```{r}
+bSG <- setdiff(bInnGenes, degs) ##Genes associated with inner nodes that are not degs for before
+bSG <- intersect(bSG[!is.na(bSG)], ndtgs)
+aSG <- setdiff(aInnGenes, degs) ##Genes associated with inner nodes that are not degs for after
+aSG <- intersect(aSG[!is.na(aSG)], ndtgs)
+```
+There are 171 and 73 genes that are neither differentially expressed nor have differential txps but contain differential subgroups
+
+
+```{r}
+aGenes <- lapply(Descendants(tree, cNodeA, "tip"), function(txps) ## genes that map to these inner nodes
+    {
+        txps <- rownames(y)[txps]
+        gs <- t2GDf[txps,"gene_id"]
+    })
+print(length(unlist(aGenes)))
+
+bGenes <- lapply(Descendants(tree, cNodeB, "tip"), function(txps) ## genes that map to these inner nodes
+    {
+        txps <- rownames(y)[txps]
+        gs <- t2GDf[txps,"gene_id"]
+    })
+print(length(unlist(bGenes)))
+```
+A total of 14800 and 16353 genes contain differentially expressed txps/sub-groups
+
+### Leafcutter
+```{r}
+suppressPackageStartupMessages(library(dplyr))
+df1 <- read.delim("../ChimpData/leafcutter/leafcutter_ds_cluster_significance.txt")
+qcut = 0.1
+print(sum(df1[["p.adjust"]] <= qcut, na.rm=T))
+leafGenes <- df1 %>% filter(p.adjust <= qcut) %>% select(genes) %>% unlist %>% strsplit(split = ",", fixed = T)
+
+print(length(unlist(leafGenes)))
+print(length(unique(unlist(leafGenes))))
+
+nLGenes <- sapply(leafGenes,length)
+print(max(nLGenes))
+print(sum(nLGenes==2))
+
+print(length(intersect(ndtgs,setdiff(leafGenes,degs))))
+print(length(intersect(leafGenes,dgsNF)))
+```
+Leafcutter yields a total of 1764 unique genes, with 58 clusters comprising 2 genes
+Around 552 genes are not differentially expressed genes and neither contain differentially expressed transcripts
+Only 35 intersect with genes that are degs but show no differential expression at the level of transcripts (much less than our method).
+
+### Comparing leafcutter with our groups
+```{r}
+length(setdiff(unlist(leafGenes), aGenes))
+length(setdiff(unlist(leafGenes), bGenes))
+
+length(intersect(aInnGenes, unlist(leafGenes)))
+```
+Of the 1764 genes given by leafcutter, 463 are not given by our differential expression method. Of the 310 genes having subgroups - only 28 overlap with leafcutter.
+
+### Comparison with tree terminus runs with and without threshold
+```{r}
+treeNoThresh <- tree
+yNoThresh <- y
+load("environment/Chimp/tree.RData")
+load("environment/Chimp/yrem_swish.RData")
+txpThresh <- rownames(y)
+rm(y)
+gc()
+load("environment/Chimp/tBefore.RData")
+load("environment/Chimp/tAfter.RData")
+cNodeBThresh <- tBefore[["0.1"]][["candNodeO"]] ##Before
+cNodeAThresh <- tAfter[["0.1"]][["candNodeO"]]  ##After
+
+cNodeBInnThresh <- cNodeBThresh[cNodeBThresh >= length(txpThresh)] ## before inner nodes
+cNodeAInnThresh <- cNodeAThresh[cNodeAThresh >= length(txpThresh)] ## after inner nodes
+
+txpAThresh <- tree$tip[unlist(Descendants(tree, cNodeAThresh, "tip"))]
+txpAInnThresh <- tree$tip[unlist(Descendants(tree, cNodeAInnThresh, "tip"))]
+
+descAThresh <- sapply(Descendants(tree, cNodeAInnThresh, "tip"), function(tips) {
+    txps <- txpThresh[tips]
+    match(txps, rownames(yAll))
+})
+
+print(sum(sapply(descAThresh, length) > 2))
+descBThresh <- sapply(Descendants(tree, cNodeBInnThresh, "tip"), function(tips) {
+    txps <- txpThresh[tips]
+    match(txps, rownames(yAll))
+})
+
+descA <- Descendants(treeNoThresh, cNodeAInn, "tip")
+print(sum(sapply(descA, length) > 2))
+
+descB <- Descendants(treeNoThresh, cNodeBInn, "tip")
+
+inds <- rep(-1, length(descAThresh))
+for(j in seq_along(descAThresh)) {
+    txps <- descAThresh[[j]]
+    for(i in seq_along(descA)){
+        tInt <- intersect(txps, descA[[i]])
+        if(length(tInt) > 1)
+        {
+            if(sum(txps %in% descA[[i]]) == length(txps))
+            {
+                inds[j] <- i
+                break()
+            }
+            print(i)
+            print(j)
+            #print(paste(txps,tInt,i))
+        }
+    }
+}
+txpNMatch <- tree$tip[unlist(Descendants(tree, cNodeAInnThresh[inds==-1], "tip"))] ## txps belonging to groups that are not included in no threshold inner nodes
+print(length(setdiff(txpAThresh, txpA))) ##Number of txps that we get by t
+print(length(setdiff(txpA, txpAThresh)))
+
+print(length(setdiff(txpAInnThresh, txpA)))
+print(length(setdiff(txpNMatch, txpA)))
+
+
+
+print(table(sapply(descAThresh,length)))
+print(table(sapply(descA,length)))
+print(sum(inds == -1))
+print(table(sapply(descAThresh, length)[inds==-1]))
+
+lS <- sapply(inds, function(iM) {
+    if(iM != -1)
+        length(descA[[iM]])
+    else
+        -1
+})
+print(table(lS))
+
+lS <- sapply(seq_along(inds), function(i) {
+    if(inds[i] != -1)
+        length(descA[[inds[i]]]) > length(descAThresh[[i]])
+    else
+        FALSE
+})
+print(table(lS))
+```
+So we had 29 subgroups with larger than 2 txps and now we have 38 such groups
+Out of 261 groups that were discovered earlier, there were 82 groups such that are no longer differentially expressed. Some of these groups were even 3-5 txps long.
+460 descendant txps of groups obtained using threshold dont belong to obtained via no threshold.
+The txps corresponding to inner nodes that are not included in txps belonging the no threshold group are the same txps that belong to nodes that are not present in the no threshold case 
+So mostly all initial subgroups that match, match completely and none is a descendant of the bigger group
+
+
+#### Neither DTE, DGE
+```{r}
+treeTermG <- setdiff(unlist(aInnGenesNNA), degs) ##Genes associated with inner nodes that are not degs for after
+treeTermG <- intersect(treeTermG, ndtgs)
+
+leafG <- setdiff(unlist(leafGenes), degs)
+leafG <- intersect(leafG, ndtgs)
+
+treeOnly <- setdiff(treeTermG, leafG)
+leafOnly <- setdiff(leafG, treeTermG)
+```
+
+```{r}
+load("environment/Chimp/mapDf.Rdata")
+indsM <- match(setdiff(txpAInnThresh, txpA), mapDf[,1])-1
+```
+<!-- #### Visualizing these cases -->
+<!-- ```{r} -->
+<!-- commGenes <- intersect(aInnGenes, dgsNF) -->
+<!-- commInds <- match(commGenes, aInnGenes) -->
+<!-- nodeInds <- cNodeAInn[match(commGenes, aInnGenes)] -->
+<!-- print(head(mcols(yAll)[cNodeAInn[commInds],"qvalue"])) ##qvalues for the inner nodes that are differential for the above genes -->
+
+<!-- ### Plotting inner Nodes -->
+<!-- i=1 -->
+<!-- plotInfReps(yAll, cNodeAInn[commInds[i]], x="condition") -->
+
+<!-- ### Plotting Gene -->
+<!-- plotInfReps(gy, aInnGenes[commInds[i]], x="condition") -->
+
+<!-- ### Plotting transcript -->
+<!-- print(g2T[aInnGenes[commInds[i]]][[1]]) -->
+<!-- par(mfrow=c(2,1)) -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][2], x="condition") -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][3], x="condition") -->
+<!-- ### third transcript not included because already filtered -->
+
+<!-- ### Plotting inner Nodes -->
+<!-- i=2 -->
+<!-- plotInfReps(yAll, cNodeAInn[commInds[i]], x="condition") -->
+
+<!-- ### Plotting Gene -->
+<!-- plotInfReps(gy, aInnGenes[commInds[i]], x="condition") -->
+
+<!-- ### Plotting transcript -->
+<!-- print(g2T[aInnGenes[commInds[i]]][[1]]) -->
+<!-- par(mfrow=c(2,1)) -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][1], x="condition") -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][2], x="condition") -->
+
+<!-- ### Plotting inner Nodes -->
+<!-- i=3 -->
+<!-- plotInfReps(yAll, cNodeAInn[commInds[i]], x="condition") -->
+
+<!-- ### Plotting Gene -->
+<!-- plotInfReps(gy, aInnGenes[commInds[i]], x="condition") -->
+
+<!-- ### Plotting transcript -->
+<!-- print(g2T[aInnGenes[commInds[i]]][[1]]) -->
+<!-- par(mfrow=c(3,2)) -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][1], x="condition") -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][2], x="condition") -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][3], x="condition") -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][4], x="condition") -->
+<!-- plotInfReps(yAll, g2T[aInnGenes[commInds[i]]][[1]][5], x="condition") -->
+<!-- ``` -->
+
+<!-- #### No DTE, DGE but differential grouping -->
+<!-- ```{r} -->
+<!-- bSG <- setdiff(bInnGenes, degs) ##Genes associated with inner nodes that are not degs for before -->
+<!-- bSG <- bSG[!is.na(bSG)] -->
+<!-- aSG <- setdiff(aInnGenes, degs) ##Genes associated with inner nodes that are not degs for after -->
+<!-- aSG <- aSG[!is.na(aSG)] -->
+<!-- hist(mcols(gy)[union(aSG, bSG),"qvalue"]) ### Histogram of qvalues of genes associated with inner nodes that are not differentially expressed -->
+
+<!-- aSG <- aSG[order(mcols(gy)[aSG,"qvalue"], decreasing = T)] -->
+<!-- print(paste(length(bSG), length(aSG))) -->
+<!-- inds <- match(aSG, aInnGenes) -->
+<!-- ``` -->
+<!-- There are 70 and 54 genes which have sub differential groups but neither differentially expressed txps neither degs -->
+
+<!-- #### Visualizing some of these genes -->
+<!-- ```{r} -->
+<!-- hist(mcols(yAll)[cNodeAInn,"qvalue"]) -->
+
+<!-- ### Plotting group -->
+<!-- i=1 -->
+<!-- plotInfReps(yAll, cNodeAInn[inds[i]], x="condition") -->
+
+<!-- ### Plotting Gene -->
+<!-- plotInfReps(gy, aInnGenes[inds[i]], x="condition") -->
+
+<!-- ### Plotting group -->
+<!-- i=2 -->
+<!-- plotInfReps(yAll, cNodeAInn[inds[i]], x="condition") -->
+
+<!-- ### Plotting Gene -->
+<!-- plotInfReps(gy, aInnGenes[inds[i]], x="condition") -->
+
+<!-- i=3 -->
+<!-- ### Plotting group -->
+<!-- plotInfReps(yAll, cNodeAInn[inds[i]], x="condition") -->
+
+<!-- ### Plotting Gene -->
+<!-- plotInfReps(gy, aInnGenes[inds[i]], x="condition") -->
+<!-- ``` -->
+
+<!-- #### Comparing with actual terminus group -->
+<!-- Assumption that the big group here is the one given by terminus (this is still different from the original terminus) -->
+<!-- ```{r} -->
+<!-- sum(Ancestors(tree, cNodeAInn, "parent") == nrow(y)+1) -->
+<!-- ``` -->
+<!-- Around 85 out of 176 stop below the level given by terminus -->

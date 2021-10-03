@@ -463,3 +463,154 @@ computeTDepth <- function(tree, methNodes)
 {
   return(sum(node.depth(tree, 2)[methNodes])/length(methNodes))
 }
+
+### Associate a group with every gene
+getGeneGroup <- function(tree, t2GDf)
+{
+  getGenes <- function(node)
+  {
+    txps <- tree$tip[unlist(Descendants(tree, node, "tip"))]
+    genes <- t2GDf[txps,"gene_id"]
+    unique(genes)
+  }
+  getNode <- function(g, cur_root, inds)
+  {
+    genes <- getGenes(cur_root)
+    ug = unique(genes)
+    if(length(ug) == 1)
+    {
+      if(ug == g)
+        return(c(inds, cur_root))
+    }
+    children <- Descendants(tree, cur_root, "child")
+    genes <- lapply(children, getGenes)
+    nodeInds <- c()
+    gInd <- which(sapply(genes, function(gene) g %in% gene))
+    if(length(gInd) == 0)
+      return(-1)
+    #print(children)
+    children <- children[gInd]
+    for(ch in children)
+      inds <- getNode(g, ch, inds)
+    return(inds)
+  }
+
+  innNodes <- Descendants(tree, length(tree$tip.label)+1, "child")
+  # innNodesAll <- unlist(Descendants(tree, innNodesAll, "all"))
+  # innNodesM <- rep(F, length(innNodesAll))
+  # names(innNodesM) <- as.character(innNodesAll)
+  #innNodes <- innNodes[innNodes >= length(tree$tip.label)] ### All children of root that is not a leaf (aka highest)
+  txpAll <- Descendants(tree, innNodes, "tips")
+  genesAll <- unique(t2GDf[tree$tip[unique(unlist(txpAll))],"gene_id"])
+  geneTGroup <- vector(mode = "list", length(genesAll))
+  names(geneTGroup) <- genesAll
+  nGenes <- c()
+  for(i in seq_along(innNodes))
+  {
+    # if(innNodesM[as.character(innNodes[i])])
+    #   next()
+    print(i)
+    if(innNodes[i] <= length(tree$tip))
+    {
+      gene <- t2GDf[tree$tip[innNodes[i]], "gene_id"]
+      geneTGroup[[gene]] <- c(geneTGroup[[gene]], innNodes[i])
+   #   innNodesM[names(innNodes)[i]] <- T
+    }
+    else
+    {
+      genes <- getGenes(innNodes[i])
+      for(g in genes)
+      {
+        inds <- getNode(g, innNodes[i], geneTGroup[[g]])
+        if(-1 %in% inds)
+          print(paste("could not find a node for", g))
+        desc <- Descendants(tree, inds, "all")
+      #  innNodesM[as.character(unlist(desc))] <- T
+        geneTGroup[[g]] <- c(geneTGroup[[g]], inds)
+      }
+    }
+  }
+  geneTGroup <- lapply(geneTGroup, unique)
+  return(geneTGroup)
+}
+
+plotGene <- function(gene, y, gy, gg, tree, type = c("txp"), inds_consid)
+{
+  if(!type %in% c("txp", "sub_gene", "gene"))
+    stop("Invalid name")
+  library(fishpond)
+  nodeInds <- gg[[gene]]
+  nodeCons <- intersect(nodeInds, inds_consid)
+  nodesNotCons <- setdiff(nodeInds, nodeCons)
+  nodesO <- c()
+  if(length(nodesNotCons) != 0)
+  {
+      ch <- unlist(Descendants(tree, nodesNotCons, "child"))
+      
+      while(sum(ch %in% inds_consid) != length(ch))
+      {
+        nodesO <- c(nodesO, ch[ch %in% inds_consid])
+        rem <- ch[!(ch %in% inds_consid)]
+        ch <- unlist(Descendants(tree, rem, "child"))
+      }
+      nodesO <- unique(c(nodesO, ch[ch %in% inds_consid]))
+  }
+  nodeInds <- c(nodesO, nodeCons)
+  # print(nodeInds)
+  # if(length(nodeInds) == 1)
+  # {
+  #   if(nodeInds > length(tree$tip))
+  #     nodeInds <- Descendants(tree, nodeInds, "child")
+  # }
+  #plot all inner nodes
+  #plot txp with max qvalue
+  
+  txps <- nodeInds[nodeInds <= length(tree$tip)]
+  innNodes <- nodeInds[nodeInds > length(tree$tip)]
+  nodeInds <- setdiff(nodeInds, txps)
+  
+
+  if(type == "txp")
+  {
+
+    if(length(innNodes) > 0)
+      txps <- c(txps,unlist(Descendants(tree, innNodes, "tip")))
+    row <- ifelse(length(txps) == 1, 1, 2)
+    x <- ifelse(length(txps) <= 2, 1, 2)
+    if(length(txps) > 3)
+      txps <- match(rownames(y)[txps][order(mcols(y)[txps,"qvalue"])[1:4]], tree$tip)
+      
+    par(mfrow=c(row,x))
+    print(txps)
+    for(i in seq_along(txps))
+      plotInfReps(y, txps[i], x="condition", main = paste("Transcript ", tree$tip[txps[i]]))
+    #dev.off()
+  }
+  
+  if(type == "sub_gene")
+  {
+    row <- ifelse(length(nodeInds) == 1, 1, 2)
+    x <- ifelse(length(nodeInds) <= 2, 1, 2)
+    if(length(nodeInds) > 4)
+      nodeInds <- rownames(y)[nodeInds][order(mcols(y)[nodeInds,"qvalue"])[1:4]]
+    par(mfrow=c(row,x))
+    print(nodeInds)
+    for(i in seq_along(nodeInds))
+      plotInfReps(y, nodeInds[i], x="condition", main = paste("Sub gene group ", nodeInds[i], " with ", length(Descendants(tree, nodeInds[i], "tip")[[1]]), 
+                                                              "transcripts"))
+    #dev.off()
+  }
+  if(type == "gene")
+  {
+    par(mfrow=c(1,1))
+    plotInfReps(gy, gene, x = "condition", main = paste("Gene ", gene))
+  }
+}
+# ### Given a gene find the group/sub-group it belongs to within the tree that has the lowest qvalue or return NA if all txps are DTEs
+# ### mapdF list mapping gene to txps 
+# getGeneGroup <- function(tree, yAll, gene, mapDf, qvalue = 0.1) {
+#   if(! gene %in% names(mapDf))
+#     stop("invalid gene input")
+#   txps <- mapDf[[gene]]
+#   
+# }
