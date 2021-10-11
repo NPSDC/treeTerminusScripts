@@ -58,6 +58,12 @@ computeSign <- function(y, x, pc = 5, minP = 0.7) {
     return(signs)
 }
 
+estimatePThresh <- function(y, adjPval = 0.05) {
+    pvalues <- mcols(y)[["pvalue"]]
+    adPval <- which.min(abs(p.adjust(pvalues, method = "BH") - adjPval))
+    return(pvalues[adPval])
+}
+
 checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
 {
     if(parent > length(mInfRV) | any(desc > length(mInfRV)))
@@ -72,10 +78,10 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
         if(all(!nodeSig[desc])) ## All are non signficant
         {
             pIRV <- mInfRV[parent]
-            cIRV <- mInfRV[children]
-            diff <- pIRV - mean(cIRV)
-            if(diff <= infDiff)
-            #if(pIRV >= infDiff)
+            # cIRV <- mInfRV[children]
+            # diff <- pIRV - mean(cIRV)
+            # if(diff <= infDiff)
+            if(pIRV >= infDiff)
                 return(T)
             #print("irv")
             return(F)
@@ -94,7 +100,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
     }
 }
 
-doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=40, inds = NULL)
+doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = NULL)
 {
     group <- !(is.null(iRVBin) | is.null(mCountBin))
     levels <- node.depth(tree, 2)
@@ -160,7 +166,8 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=40, inds = NU
     }
 }
 
-runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.1), cSign = T, cores = 1)
+runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.1), 
+                              compPThresh = T, cSign = T, cores = 1)
 {
     if(!ihwType %in% c("a", "b"))
         stop(paste("Invalid IHW type entered", ihwType))
@@ -187,10 +194,14 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
     }
     else
     {
-        nSol <- runTreeTermAlpha(tree, y, cond, infDiff, mcols(y)[["pvalue"]], pCutOff, pChild)
-        # nSol <- mclapply(alphas, function(alpha) {
-        #     runTreeTermAlpha(tree, y, cond, infDiff, mcols(yAll)[["pvalue"]], alpha, alpha, cSign = cSign)
-        # }, mc.cores = cores)
+        # nSol <- runTreeTermAlpha(tree, y, cond, infDiff, mcols(y)[["pvalue"]], pCutOff, pChild)
+        
+        nSol <- mclapply(alphas, function(alpha) {
+            pThresh <- alpha
+            if(compPThresh)
+                pThresh <- estimatePThresh(y[1:length(tree$tip),], alpha)
+            runTreeTermAlpha(tree, y, cond, infDiff, mcols(yAll)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign)
+        }, mc.cores = cores)
         resAlphas <- lapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[["nodesLooked"]]))
         resDfs <- mclapply(resAlphas, function(res) 
             {
@@ -200,8 +211,8 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
             }, mc.cores = cores)
         for(i in seq_along(alphas)) {
             sols[[i]][["candNodeO"]] <- intersect(which(nSol[["candNode"]]), resDfs[[i]][resDfs[[i]]$adj_pvalue <= alphas[i],"inds"])
-            remNegNodes <- setdiff(which(nSol[["candNode"]]), sols[[i]][["candNodeO"]])
-            # remNegNodes <- setdiff(which(nSol[[i]][["candNode"]]), sols[[i]][["candNodeO"]])
+            # remNegNodes <- setdiff(which(nSol[["candNode"]]), sols[[i]][["candNodeO"]])
+            remNegNodes <- setdiff(which(nSol[[i]][["candNode"]]), sols[[i]][["candNodeO"]])
             if(sum(sols[[i]][["negNode"]][remNegNodes]) > 0)
                 stop("Incorrect neg nodes ")
             # sols[[i]][["negNode"]] <- nSol[["negNode"]]
@@ -209,17 +220,19 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
             sols[[i]][["negNode"]][remNegNodes] <- T
             sols[[i]][["negNodeO"]] <- which(sols[[i]][["negNode"]])
         }
-        nSol <- list(nSol)
+        # nSol <- list(nSol)
     }
     for(i in seq_along(alphas))
     {
         j = i
         sols[[i]][["resIHW"]] <- resAlphas[[i]]
         sols[[i]][["resDf"]] <- resDfs[[i]]
-        if(ihwType=="a")
-            j=1
+        # if(ihwType=="a")
+        #     j=1
         sols[[i]][["nodesLooked"]] <- nSol[[j]][["nodesLooked"]]
         sols[[i]][["candNode"]] <- nSol[[j]][["candNode"]]
+        sols[[i]][["pCut"]] <- nSol[[j]][["pCut"]]
+        sols[[i]][["pChild"]] <- nSol[[j]][["pChild"]]
     }
     return(sols)
 }
@@ -277,5 +290,5 @@ runTreeTermAlpha <- function(tree, y, cond, infDiff, pvalue, pCutOff = 0.05, pCh
         }
         #print(nodesLooked)
     }
-    return(list("candNode" = candNode, "negNode" = negNode, "nodesLooked" = nodesLooked))
+    return(list("candNode" = candNode, "negNode" = negNode, "nodesLooked" = nodesLooked, "pCut" = pCutOff, "pChild" = pChild))
 }
