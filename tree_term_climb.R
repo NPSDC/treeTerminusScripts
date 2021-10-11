@@ -94,13 +94,19 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
     }
 }
 
-doIHW <- function(y, tree, alpha, nbins=40, inds = NULL)
+doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=40, inds = NULL)
 {
+    group <- !(is.null(iRVBin) | is.null(mCountBin))
     levels <- node.depth(tree, 2)
     levels <- ifelse(levels > 4, 5, levels)
-    df <- data.frame(IRVCut = cut(mcols(y)[["meanInfRV"]], breaks = quantile(mcols(y)[["meanInfRV"]], 0:8/8), include.lowest = T),
-                     levels, pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]])
+    mCount <- rowMeans(assays(y)[["counts"]])
+    df <- data.frame(IRVCut = cut(mcols(y)[["meanInfRV"]], breaks = quantile(mcols(y)[["meanInfRV"]], 0:iRVBin/iRVBin), include.lowest = T),
+                     mCCut = cut(mCount, breaks = quantile(mCount, 0:mCountBin/mCountBin), include.lowest = T),
+                     levels, pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]], mCount = mCount)
+    if(group)
+        df[["group"]] <- factor(paste(df[["IRVCut"]], df[["mCCut"]]))
     
+    ## Splitting the nodes into folds, such that each fold contains equal amount of root child txps and inner nodes
     rChildNodes <- Descendants(tree, length(tree$tip.label)+1, "children") ### Root child nodes
     folds <- rep(1, nrow(y))
     rParNodes <- rChildNodes[rChildNodes %in% seq_along(tree$tip.label)] ## Txps that directly map to root
@@ -117,6 +123,8 @@ doIHW <- function(y, tree, alpha, nbins=40, inds = NULL)
         #folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")))] <- i
         folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")),d2[[i]])] <- i
     # print(table(folds))
+    
+    ### For running on subset of y
     if(!is.null(inds))
     {
         if(!is.logical(inds) | length(inds) != nrow(y))
@@ -125,9 +133,31 @@ doIHW <- function(y, tree, alpha, nbins=40, inds = NULL)
         folds <- folds[inds]
         print(table(folds))    
     }
-    resgroup <- ihw(pvalue ~ infRVs, data = df, nbins=nbins,
-                    alpha = alpha, folds = folds,
-                    covariate_type = "ordinal")
+    
+    if(group){
+        #print(table(df[["group"]]))
+        resgroup <- ihw(pvalue ~ group, data = df, alpha = alpha, folds = folds,
+                        covariate_type = "nominal")
+        return(resgroup)
+    }
+    if(!is.null(nbins)) {
+        resgroup <- ihw(pvalue ~ infRVs, data = df, nbins=nbins,
+                        alpha = alpha, folds = folds,
+                        covariate_type = "ordinal")
+        return(resgroup)
+    }
+    if(!is.null(iRVBin)) {
+        resgroup <- ihw(pvalue ~ IRVCut, data = df,
+                        alpha = alpha, folds = folds,
+                        covariate_type = "ordinal")
+        return(resgroup)
+    }
+    if(!is.null(mCountBin)) {
+        resgroup <- ihw(pvalue ~ mCCut, data = df,
+                        alpha = alpha, folds = folds,
+                        covariate_type = "ordinal")
+        return(resgroup)
+    }
 }
 
 runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.1), cSign = T, cores = 1)
