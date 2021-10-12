@@ -64,7 +64,7 @@ estimatePThresh <- function(y, adjPval = 0.05) {
     return(pvalues[adPval])
 }
 
-checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
+checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig)
 {
     if(parent > length(mInfRV) | any(desc > length(mInfRV)))
         stop("Invalid parent or child indexes")
@@ -81,7 +81,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, infDiff, nodeSig)
             # cIRV <- mInfRV[children]
             # diff <- pIRV - mean(cIRV)
             # if(diff <= infDiff)
-            if(pIRV >= infDiff)
+            if(pIRV >= minInfRV)
                 return(T)
             #print("irv")
             return(F)
@@ -166,7 +166,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
     }
 }
 
-runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.1), 
+runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.1), 
                               compPThresh = T, cSign = T, cores = 1)
 {
     if(!ihwType %in% c("a", "b"))
@@ -183,7 +183,7 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
                 df
             }, mc.cores = cores)
         nSol <- mclapply(seq_along(resDfs), function(i) {
-            runTreeTermAlpha(tree, y, cond, infDiff, resDfs[[i]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign)
+            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[i]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign)
         }, mc.cores = cores)
         for(i in seq_along(alphas))
         {
@@ -194,23 +194,24 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
     }
     else
     {
-        # nSol <- runTreeTermAlpha(tree, y, cond, infDiff, mcols(y)[["pvalue"]], pCutOff, pChild)
+        # nSol <- runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff, pChild)
         
         nSol <- mclapply(alphas, function(alpha) {
             pThresh <- alpha
             if(compPThresh)
                 pThresh <- estimatePThresh(y[1:length(tree$tip),], alpha)
-            runTreeTermAlpha(tree, y, cond, infDiff, mcols(yAll)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign)
+            print(pThresh)
+            runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign)
         }, mc.cores = cores)
-        resAlphas <- lapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[["nodesLooked"]]))
-        resDfs <- mclapply(resAlphas, function(res) 
+        resAlphas <- lapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[[i]][["nodesLooked"]]))
+        resDfs <- mclapply(seq_along(resAlphas), function(i) 
             {
-                df <- as.data.frame(res)
-                df <- cbind(df, inds = which(nSol[["nodesLooked"]]))
+                df <- as.data.frame(resAlphas[[i]])
+                df <- cbind(df, inds = which(nSol[[i]][["nodesLooked"]]))
                 df
             }, mc.cores = cores)
         for(i in seq_along(alphas)) {
-            sols[[i]][["candNodeO"]] <- intersect(which(nSol[["candNode"]]), resDfs[[i]][resDfs[[i]]$adj_pvalue <= alphas[i],"inds"])
+            sols[[i]][["candNodeO"]] <- intersect(which(nSol[[i]][["candNode"]]), resDfs[[i]][resDfs[[i]]$adj_pvalue <= alphas[i],"inds"])
             # remNegNodes <- setdiff(which(nSol[["candNode"]]), sols[[i]][["candNodeO"]])
             remNegNodes <- setdiff(which(nSol[[i]][["candNode"]]), sols[[i]][["candNodeO"]])
             if(sum(sols[[i]][["negNode"]][remNegNodes]) > 0)
@@ -237,7 +238,7 @@ runTreeTermAlphas <- function(tree, y, cond, infDiff, pCutOff = 0.05, pChild = 0
     return(sols)
 }
 
-runTreeTermAlpha <- function(tree, y, cond, infDiff, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T)
+runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T)
 {
     nodeSig <- rep(T, nrow(y)) ### node signficant or not
     nodeSig[pvalue > pChild] = F
@@ -270,7 +271,7 @@ runTreeTermAlpha <- function(tree, y, cond, infDiff, pvalue, pCutOff = 0.05, pCh
             desc <- unlist(Descendants(tree,p,"all"))
             if(any(nodesLooked[desc]))
                 break()
-            if(!checkGoUp(p, desc, child, signs, mcols(y)[["meanInfRV"]], infDiff, nodeSig))
+            if(!checkGoUp(p, desc, child, signs, mcols(y)[["meanInfRV"]], minInfRV, nodeSig))
             #if(!checkGoUp(p, desc, child, signs, mInfRV, infDiff, nodeSig))
                 break()
             foundCand <- T
