@@ -200,6 +200,8 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             pThresh <- alpha
             if(compPThresh)
                 pThresh <- estimatePThresh(y[1:length(tree$tip),], alpha)
+            else
+                pThresh <- 0.05
             print(pThresh)
             runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign)
         }, mc.cores = cores)
@@ -217,7 +219,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             if(sum(sols[[i]][["negNode"]][remNegNodes]) > 0)
                 stop("Incorrect neg nodes ")
             # sols[[i]][["negNode"]] <- nSol[["negNode"]]
-            sols[[i]][["negNode"]] <- nSol[["negNode"]]
+            sols[[i]][["negNode"]] <- nSol[[i]][["negNode"]]
             sols[[i]][["negNode"]][remNegNodes] <- T
             sols[[i]][["negNodeO"]] <- which(sols[[i]][["negNode"]])
         }
