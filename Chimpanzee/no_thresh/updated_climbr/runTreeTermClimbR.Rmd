@@ -1,0 +1,114 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/Chimp/no_thresh/yAll.RData")
+load("environment/Chimp/no_thresh/y.RData")
+load("environment/Chimp/no_thresh/tree.RData")
+```
+
+#### Distribution of signs and levels
+```{r}
+minInfRV <- 3
+nLeaf <- length(tree$tip)
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+<!-- #### Running IHW -->
+<!-- ```{r} -->
+<!-- df <- data.frame(IRVCut = cut(mcols(yAll)[["meanInfRV"]], breaks = quantile(mcols(yAll)[["meanInfRV"]], 0:4/4), include.lowest = T), -->
+<!--                  levels, pvalue = mcols(yAll)[["pvalue"]], infRVs = mcols(yAll)[["meanInfRV"]]) -->
+<!-- table(df[["IRVCut"]]) -->
+<!-- res <- ihw(pvalue ~ IRVCut,  data = df, -->
+<!--            alpha = 0.1, -->
+<!--            covariate_type = "ordinal") -->
+<!-- print(sum(mcols(yAll)[["qvalue"]] < 0.1)) -->
+<!-- print(rejections(res)) -->
+<!-- plot(res) -->
+<!-- ``` -->
+
+#### Running tree Terminus Climber  
+```{r}
+# tBefore <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), compPThresh = T, cores = 3)
+# save(tBefore, file = "environment/Chimp/no_thresh/updated_tcr/tBefore.RData")
+# tAfter <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)
+# save(tAfter, file = "environment/Chimp/no_thresh/updated_tcr/tAfter.RData")
+# tAfterInf0_2 <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)
+# save(tAfterInf0_2, file = "environment/Chimp/no_thresh/updated_tcr/tAfterInf0_2.RData")
+# # load("environment/Chimp/no_thresh/updated_tcr/tBefore.RData")
+# # load("environment/Chimp/no_thresh/updated_tcr/tAfter.RData")
+# 
+# tAfterOPVal <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.10), cores = 3, compPThresh = F)
+# save(tAfterOPVal, file = "environment/Chimp/no_thresh/updated_tcr/tAfterOPval.RData")
+
+# tAfterNoStopOPVal <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.10), cores = 1, compPThresh = F, cSign = F)
+# save(tAfterNoStopOPVal, file = "environment/Chimp/no_thresh/updated_tcr/tAfterNoStopOPval.RData")
+```
+
+#### No Stopping Condition
+```{r}
+# tBeforeNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cSign = F, cores = 3)
+# save(tBeforeNoStop, file = "environment/Chimp/no_thresh/updated_tcr/tBeforeNoStop.RData")
+# tAfterNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cSign = F, cores = 3, compPThresh = T)
+# save(tAfterNoStop, file = "environment/Chimp/no_thresh/updated_tcr/tAfterNoStop.RData")
+# load("environment/Chimp/no_thresh/tBeforeNoStop.RData")
+# load("environment/Chimp/no_thresh/tAfterNoStop.RData")
+
+# tTempIHW <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, corr = c("IHW"), runType = c("b"), alphas = c(0.10), cSign = F, cores = 1)
+# save(tTempIHW, file = "environment/Chimp/no_thresh/updated_tcr/tTempIHW.RData")
+# tBTempQ <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, corr = c("qvalue"), runType = c("b"), alphas = c(0.10), cSign = F, cores = 1)
+# save(tBTempQ, file = "environment/Chimp/no_thresh/updated_tcr/tBTempQ.RData")
+# tBTempBH <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, corr = c("BH"), runType = c("b"), alphas = c(0.10), cSign = F, cores = 1)
+# save(tBTempBH, file = "environment/Chimp/no_thresh/updated_tcr/tBTempBH.RData")
+# tATempQ <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, corr = c("qvalue"), runType = c("a"), alphas = c(0.10), cSign = F, cores = 1)
+# save(tATempQ, file = "environment/Chimp/no_thresh/updated_tcr/tATempQ.RData")
+tATempBH <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, corr = c("BH"), runType = c("a"), alphas = c(0.10), cSign = F, cores = 1)
+save(tATempBH, file = "environment/Chimp/no_thresh/updated_tcr/tATempBH.RData")
+# tATempIHW <- runTreeTermAlphas(tree, yAll, "condition", -100, pCutOff = 0.05, pChild = 0.05, corr = c("IHW"), runType = c("a"), alphas = c(0.10), cSign = F, cores = 1)
+# save(tATempIHW, file = "environment/Chimp/no_thresh/updated_tcr/tATempIHW.RData")
+```
+
+#### No sign criteria
+```{r}
+# tBeforeNoStop <- runTreeTermAlphas(tree, yAll, "condition", 1e6, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), cSign = F, cores = 3)
+# save(tBeforeNoStop, file = "environment/Chimp/no_thresh/tBeforeNoStop.RData")
+# tAfterNoSign <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("a"), alphas = c(0.01, 0.05, 0.10), cSign = F, cores = 3, compPThresh = T)
+# save(tAfterNoSign, file = "environment/Chimp/no_thresh/updated_tcr/tAfterNoSign.RData")
+# load("environment/Chimp/no_thresh/tBeforeNoStop.RData")
+# load("environment/Chimp/no_thresh/tAfterNoStop.RData")
+```
+
+#### Distribution of nodes
+```{r}
+# print(sapply(c(0.01, 0.05, 0.1), function(x) sum(mcols(y)[["qvalue"]] < x)))
+# 
+# print(sapply(tBefore, function(node) table(levels[node[["candNodeO"]]])))
+# print(sapply(tAfter, function(node) table(levels[node[["candNodeO"]]])))
+# 
+# print(sapply(tBeforeNoStop, function(node) table(levels[node[["candNodeO"]]])))
+# print(sapply(tAfterNoStop, function(node) table(levels[node[["candNodeO"]]])))
+```
+
+We see larger number of nodes at higher levels compared to Swim but then leaves detected are also higher
+
+IHW break into smaller bins, add counts as well 

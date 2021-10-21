@@ -1,0 +1,181 @@
+---
+title: "After across pvalues"
+author: "Noor Pratap Singh"
+date: "10/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Comparison of tAfter of new (updated IHW, infRV filter, pvalue) to old
+```{r}
+load("environment/Chimp/no_thresh/yAll.RData")
+load("environment/Chimp/no_thresh/tree.RData")
+load("environment/Chimp/no_thresh/tAfter.RData")
+
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+
+tAOld <- tAfter[[3]]
+cAOld <- tAOld[["candNodeO"]][tAOld[["candNodeO"]] >length(tree$tip)]
+print(length(cAOld))
+load("environment/Chimp/no_thresh/updated_tcr/tAfter.RData")
+tANew <- tAfter[[3]]
+cANew <- tANew[["candNodeO"]][tANew[["candNodeO"]]>length(tree$tip)]
+print(length(cANew))
+```
+315 and 232 inner nodes
+
+#### InfRV of the inner and leaf nodes
+```{r}
+print(summary(mcols(yAll)[["meanInfRV"]]))
+print(summary(mcols(yAll)[1:length(tree$tip),"meanInfRV"]))
+print(summary(mcols(yAll)[length(tree$tip)+1:tree$Nnode,"meanInfRV"]))
+```
+What appears a good threshold
+
+
+#### Comparing just the inner nodes
+```{r}
+cONM <- cAOld[is.na(match(cAOld, tANew$resDf$inds))] ##Old method nodes that are not even checked as part of climbing process in new
+cANM <- cANew[is.na(match(cANew, tAOld$resDf$inds))] ##New method nodes that are not even checked as part of climbing process in old
+
+print(length(cONM))
+print(length(cANM))
+
+print(sum(sapply(Ancestors(tree, cONM), function(x) sum(x %in% tANew[["negNodeO"]]) > 0))) ### Checking for ancestors of missing old nodes in new
+print(sum(sapply(Ancestors(tree, cONM), function(x) sum(x %in% tANew[["candNodeO"]]) > 0)))
+print(sum(sapply(Descendants(tree, cONM), function(x) sum(x %in% tANew[["negNodeO"]]) > 0))) ### Checking for ancestors of missing old nodes in new
+
+print(sum(sapply(Descendants(tree, cANM), function(x) sum(x %in% tAOld[["negNodeO"]]) > 0))) ### Checking for ancestors of missing new nodes in old
+```
+201 and 97 such nodes that are not even checked as a part of climbing process. We stop at a level lower than these nodes
+
+#### Looking at the old missing after nodes
+```{r}
+print(summary(mcols(yAll)[cONM, "meanInfRV"]))
+print(sum(mcols(yAll)[cONM, "meanInfRV"] > 0.5))
+
+print(sum(mcols(yAll)[cONM, "qvalue"] <= 0.1))
+```
+All of these old nodes have infRV of less than 3. I have updated the filtering condition where instead of checking for reduction in infRV I check for the absolute infRV at a node to be greater than threshold. have We might be able to recover 171 of these as they have an infRV of atleast 0.5. A great majority have qvalue <= 0.1
+
+#### Looking at the new missing after nodes
+```{r}
+print(summary(mcols(yAll)[cANM, "meanInfRV"]))
+
+children <- Descendants(tree,cANM,"child")
+desc <- Descendants(tree,cANM,"tip")
+descLen <- sapply(Descendants(tree,cANM,"tip"),length)
+redInfRV <- sapply(seq_along(children), function(i) mcols(yAll)[cANM[i], "meanInfRV"] - mean(mcols(yAll)[children[[i]], "meanInfRV"]))
+print(summary(redInfRV))
+
+### Nodes with descendant node pvalue > 0.032(pvalue threshold based on qvalue 0.1) but less than 0.05
+### These nodes will be missed2
+inds <- sapply(desc, function(child) sum(mcols(yAll)[child,"pvalue"] > 0.03275) > 0 & sum(mcols(yAll)[child,"pvalue"] < 0.05) > 0)
+print(sum(inds))
+
+#### Nodes that have negative reductions but contain greater than 2 txps
+print(sum(redInfRV[!inds] < 0 & descLen[!inds] > 2))
+print(sum(redInfRV[!inds] > 0))
+```
+All the missing inner nodes given by new after method have high inferential uncertainty.
+67 out of 97 are missed because of the pvalue criteria
+Out of the 30, 12 have negative reduction in infRV but have greater than 2 descendant txp, such that for a couple of them infRV increases on merging and as a result we dont call them during before method
+
+For the remaining 18 we see an increase increase in infRV
+
+
+#### Comparing the no filter nodes between old and new run of IHW along with using qvalue and BH for after
+```{r}
+load("environment/Chimp/no_thresh/updated_tcr/tAfterNoStopOPval.RData")
+load("environment/Chimp/no_thresh/tAfterNoStop.RData")
+load("environment/Chimp/no_thresh/updated_tcr/tATempQ.RData")
+load("environment/Chimp/no_thresh/updated_tcr/tATempBH.RData")
+load("environment/Chimp/no_thresh/y.RData")
+
+tAO <- tAfterNoStop[[3]]$candNodeO
+tAOI <- tAO[tAO > length(tree$tip)]
+tAOL <- tAO[tAO <= length(tree$tip)]
+
+tAN <- tAfterNoStopOPVal[[1]]$candNodeO
+tANI <- tAN[tAN > length(tree$tip)]
+tANL <- tAN[tAN <= length(tree$tip)]
+allLO <- unlist(Descendants(tree, tAO))
+allLN <- unlist(Descendants(tree, tAN))
+
+oldOnly <- setdiff(tAOI, tANI)
+newOnly <- setdiff(tANI, tAOI)
+print(mean(mcols(yAll)[oldOnly,"qvalue"] < 0.1))
+print(mean(mcols(yAll)[newOnly,"qvalue"] < 0.1))
+
+print(paste(length(tAN), length(tAO)))
+print(paste(length(oldOnly), length(newOnly)))
+
+tAQ <- tATempQ[[1]][["candNodeO"]]
+print(length(tAQ))
+print(sum(tAQ > length(tree$tip)))
+print(sum(tAQ <= length(tree$tip)))
+
+tABH <- tATempBH[[1]][["candNodeO"]]
+print(length(tABH))
+print(sum(tABH <= length(tree$tip)))
+print(sum(tABH > length(tree$tip)))
+
+dtes <- which(mcols(y)[1:length(tree$tip),"qvalue"] <= 0.1)
+mdtes <- setdiff(dtes, tABH[tABH <= length(tree$tip)]) ### missing dtes
+print(length(mdtes))
+print(sum(mdtes %in% unlist(Descendants(tree, tABH, "all"))))
+
+print(length(setdiff(dtes, tAQ[tAQ <= length(tree$tip)])))
+print(length(setdiff(dtes, tAN[tAN <= length(tree$tip)])))
+```
+More nodes for newer compared to older (14369 to 14209). The number of inner nodes also are greater (438 to 329). For the after method, we have more number of distinct groups in the newer approach compared to the old one. Further, around 70% of the new ones have qvalue < 0.1 compared to 97% of old ones. However, using qvalue we get 15084 nodes with 711 inner nodes and around 378 nodes that are not given by new IHW. We get 14253 nodes with tABH with 521 inner nodes and 13273 leaves. We at the same time miss on 1529 transcripts that would have been labelled as dtes if the procedure was run only on txps. Out of these 1529 missing txps, 140 are descendants of the inner nodes given by BH. The missing txps number 905 and 1436 for qvalue and IHW 
+
+The question arises then is that the signal derived via IHW or qvalue actually good, can only be answered in the simulated data. 
+
+
+```{r}
+load("environment/Chimp/no_thresh/tBeforeNoStop.RData")
+tBO <- tBeforeNoStop[[3]]$candNodeO
+tBOI <- tBO[tBO > length(tree$tip)]
+tBOL <- tBO[tBO <= length(tree$tip)]
+
+load("environment/Chimp/no_thresh/updated_tcr/tBeforeNoStop.RData")
+tBN <- tBeforeNoStop[[3]]$candNodeO
+tBNI <- tBN[tBN > length(tree$tip)]
+tBNL <- tBN[tBN <= length(tree$tip)]
+print(paste(length(tBNL), length(tBOL)))
+print(paste(length(tBNI), length(tBOI)))
+
+### Qvalue based
+load("environment/Chimp/no_thresh/updated_tcr/tBTempQ.RData")
+print(length(tBTempQ[[1]][["candNodeO"]]))
+print(sum(tBTempQ[[1]][["candNodeO"]] >= length(tree$tip)))
+print(sum(tBTempQ[[1]][["candNodeO"]] <= length(tree$tip)))
+tBQ <- tBTempQ[[1]][["candNodeO"]]
+
+### Benjaminni Hochberg
+load("environment/Chimp/no_thresh/updated_tcr/tBTempBH.RData")
+print(length(tBTempBH[[1]][["candNodeO"]]))
+print(sum(tBTempBH[[1]][["candNodeO"]] >= length(tree$tip)))
+print(sum(tBTempBH[[1]][["candNodeO"]] <= length(tree$tip)))
+tBBH <- tBTempBH[[1]][["candNodeO"]]
+
+print(length(setdiff(dtes, tBN[tBN <= length(tree$tip)])))
+print(length(setdiff(dtes, tBBH[tBBH <= length(tree$tip)])))
+print(length(setdiff(dtes, tBQ[tBQ <= length(tree$tip)])))
+```
+For the before method, we get a total of 15983 nodes for the new IHW compared to 15803 for old IHW. The newer IHW has more leaf nodes(15287 to 15055) but older has more inner nodes (748 to 696) (perhaps weaker qvalues as input and thus more merging)
+Just looking at the leaf nodes though, new after method gives 13931 compared to 13880 by old. Using the BH for correction (15788 nodes with 721 inner nodes) whereas qvalue for correction (19153 with 597 inner nodes). The amount of nodes with qvalues is huge compared to others, since there are so many significant leaf nodes you miss many inner nodes.
+
+However, just using the qvalues you get 15067 txps. This is slightly weird
+
+1) Look tBefore for completeness
+2) What gives more number of leaf nodes (not looking at descendants)
+3) Also support qvalue for completeness, motivation and comparison
+4) Look at simulated data and if you see more power
+#### C

@@ -1,0 +1,96 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+load("environment/Chimp/no_thresh/updated_tcr/tAfterNoStop.RData")
+load("environment/Chimp/no_thresh/tree.RData")
+load("environment/Chimp/no_thresh/yAll.RData")
+
+txps <- sapply(tAfterNoStop, function(node) node[["candNodeO"]][node[["candNodeO"]] <= length(tree$tip)])
+innNodesTxps <- sapply(tAfterNoStop, function(node) unlist(Descendants(tree, node[["candNodeO"]][node[["candNodeO"]] > length(tree$tip)], "tip")))
+innNodes <- sapply(tAfterNoStop, function(node) node[["candNodeO"]][node[["candNodeO"]] > length(tree$tip)])
+print(sapply(txps, length))
+print(sapply(innNodesTxps, length))
+print(sapply(innNodes, length))
+print(setdiff(txps[[1]], txps[[2]]))
+print(setdiff(txps[[2]], txps[[3]]))
+```
+
+#### Comparing 0.01 and 0.1
+```{r}
+commNodes <- intersect(innNodes[[1]], innNodes[[3]])
+print(length(commNodes))
+only1 <- setdiff(innNodes[[1]], commNodes) ## nodes only in 0.01
+print(length(only1))
+
+###Descendants match inner nodes of 0.1
+indsD <- sapply(Descendants(tree, only1, "all"), function(desc) {
+    sum(desc %in% innNodes[[3]]) > 0 | sum(desc %in% txps[[3]]) > 0
+})
+print(sum(indsD))
+
+indsA <- sapply(Ancestors(tree, only1, "all"), function(anc) {
+    sum(anc %in% innNodes[[3]]) > 0
+})
+print(sum(indsA))
+
+print(min(mcols(yAll)[unlist(Descendants(tree, only1[!indsD])),"meanInfRV"]))
+print(max(tAfterNoStop[[3]][["resDf"]][unlist(Descendants(tree, only1[!indsD])),"pvalue"]))
+```
+52 nodes are common between the two. Out of 653 inner nodes that are exclusive to 0.01, 633 have a descendant node given by 0.1 and no ancestor. We have 20 nodes that dont have any descendants in 0.1, almost all txps have qvalue > 0.1
+
+#### Comparing 0.1 and 0.01
+```{r}
+commNodes <- intersect(innNodes[[1]], innNodes[[3]])
+print(length(commNodes))
+only3 <- setdiff(innNodes[[3]], commNodes) ## nodes only in 0.01
+print(length(only3))
+
+###Descendants match inner nodes of 0.1
+indsD <- sapply(Descendants(tree, only3, "all"), function(desc) {
+    sum(desc %in% innNodes[[1]]) > 0 | sum(desc %in% txps[[1]]) > 0
+})
+print(sum(indsD))
+
+indsA <- sapply(Ancestors(tree, only3, "all"), function(anc) {
+    sum(anc %in% innNodes[[1]]) > 0
+})
+print(sum(indsA))
+
+only3[!indsA][1:2]
+print(min(mcols(yAll)[unlist(Descendants(tree, only3[!indsD])),"pvalue"]))
+```
+So only 48 of the 549 inner nodes have ancestors in q 0.01, for the remaining nodes all have pvalue less threshold of pvalue 0.01 and thus never get merged
+
+#### Comparing 0.05 and 0.1
+```{r}
+commNodes <- intersect(innNodes[[2]], innNodes[[3]])
+print(length(commNodes))
+only2 <- setdiff(innNodes[[2]], commNodes) ## nodes only in 0.01
+print(length(only2))
+
+###Descendants match inner nodes of 0.1
+indsD <- sapply(Descendants(tree, only2, "all"), function(desc) {
+    sum(desc %in% innNodes[[3]]) > 0 | sum(desc %in% txps[[3]]) > 0
+})
+print(sum(indsD))
+
+indsA <- sapply(Ancestors(tree, only2, "all"), function(anc) {
+    sum(anc %in% innNodes[[3]]) > 0
+})
+print(sum(indsA))
+
+print(min(mcols(yAll)[unlist(Descendants(tree, only2[!indsD])),"meanInfRV"]))
+print(max(tAfterNoStop[[3]][["resDf"]][unlist(Descendants(tree, only2[!indsD])),"pvalue"]))
+```
+262 inner nodes are common, with 395 distinct to 0.05 - 345 have their descendants mapped to a node of 0.1
