@@ -171,7 +171,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
                               compPThresh = T, cSign = T, cores = 1)
 {
     library(qvalue)
-    if(!corr %in% c("qvalue", "IHW"))
+    if(!corr %in% c("qvalue", "IHW", "BH"))
         stop(paste("Invalid correction type entered, should be either qvalue or IHW", corr))
     if(!runType %in% c("a", "b"))
         stop(paste("Invalid IHW type entered, should be either a or b", ihwType))
@@ -190,21 +190,25 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
                 })
         }
         else {
-            resAlphas <- list(qvalue(mcols(y)[["pvalue"]]))
-            resDfs <- list(data.frame(adj_pvalue=resAlphas[[1]][["qvalues"]], inds = seq(nrow(y))))
+            if(corr == "qvalue")
+                resAlphas <- list(qvalue(mcols(y)[["pvalue"]]))
+            else
+                resAlphas <- list(list(qvalues = p.adjust(mcols(y)[["pvalue"]], method="BH")))
+            resDfs <- list(data.frame(pvalue=mcols(y)[["pvalue"]], adj_pvalue=resAlphas[[1]][["qvalues"]], inds = seq(nrow(y))))
         }
         nSol <- mclapply(seq_along(alphas), function(i) {
+            j=i
             if(corr != "IHW")
-                i=1
-            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[i]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign)
+                j=1
+            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[j]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign)
         }, mc.cores = cores)
         
         for(i in seq_along(alphas))
         {
             sols[[i]][["candNodeO"]] <- which(nSol[[i]][["candNode"]])
             sols[[i]][["negNode"]] <- nSol[[i]][["negNode"]]
-        }
             sols[[i]][["negNodeO"]] <- which(nSol[[i]][["negNode"]])
+        }
     }
     else
     {
@@ -231,11 +235,14 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
         else {
             resAlphas <- lapply(seq_along(alphas), function(i) {
                 nLooked <- nSol[[i]][["nodesLooked"]]
-                qvalue(mcols(y)[["pvalue"]][nLooked])
+                if(corr=="qvalue")
+                    qvalue(mcols(y)[["pvalue"]][nLooked])
+                else
+                    list(qvalues=p.adjust(mcols(y)[["pvalue"]][nLooked], method="BH"))
             })
             resDfs <- lapply(seq_along(resAlphas), function(i) {
                     nLooked <- which(nSol[[i]][["nodesLooked"]])
-                    data.frame(adj_pvalue=res[["qvalues"]], inds = nLooked)
+                    data.frame(pvalue=mcols(y)[["pvalue"]][nLooked], adj_pvalue=resAlphas[[i]][["qvalues"]], inds = nLooked)
                 })
         }
         for(i in seq_along(alphas)) {
@@ -254,11 +261,14 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
     }
     for(i in seq_along(alphas))
     {
-        j = i
-        sols[[i]][["resIHW"]] <- resAlphas[[i]]
-        sols[[i]][["resDf"]] <- resDfs[[i]]
+        j=i
+        if(runType == "b" & corr != "IHW")
+            j=1
+        sols[[i]][["resIHW"]] <- resAlphas[[j]]
+        sols[[i]][["resDf"]] <- resDfs[[j]]
         # if(ihwType=="a")
         #     j=1
+        j = i
         sols[[i]][["nodesLooked"]] <- nSol[[j]][["nodesLooked"]]
         sols[[i]][["candNode"]] <- nSol[[j]][["candNode"]]
         sols[[i]][["pCut"]] <- nSol[[j]][["pCut"]]
