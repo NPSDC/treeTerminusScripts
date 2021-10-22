@@ -1,0 +1,102 @@
+import yaml
+configfile: "config.json"
+
+with open('cluster_partition.conf', 'r') as f:
+    partitions = yaml.safe_load(f)
+
+def get_partition(rule_name):
+    return partitions[rule_name] if rule_name in partitions else partitions['__default__']
+
+REPLICATES=config['replicates']
+
+# rule all:
+#     #input:expand(config["read_path"] + "/{rep}/sample_0{cond}_{read}.fasta", rep=REPLICATES, cond=[1,2], read=[1,2])
+#     input:expand(config['out_sal_path'] + "/{rep}_{cond}/quant.sf", rep=REPLICATES, cond=[1,2])
+#     params:
+#         partition = get_partition('all')
+
+rule run_terminus:
+    input:config['out_term_path'] + "/cluster_nwk.txt"
+        #p1 = expand(config['out_term'] + "/{run}/groups.txt", run=up_runs),
+    params:
+        partition = get_partition('run_terminus')
+
+rule run_term_collapse:
+    input:
+        expand(config['out_term_path'] + "/{rep}_{cond}/groups.txt", rep=REPLICATES, cond=[1,2])
+    output:
+        config['out_term_path'] + "/cluster_nwk.txt"
+    params:
+        term_path=config["term_path"],
+        input=config["out_sal_path"],
+        output = config['out_term_path'],
+        partition = get_partition('run_term_collapse')
+    shell:
+        """
+            cd {params.term_path}
+            target/release/terminus collapse -c 0 -d {params.input} -o {params.output} -m true --merge_type phylip
+            cd -
+        """
+
+rule run_term_group:
+    input:
+        config['out_sal_path'] + "/{rep}_{cond}/quant.sf"
+    output:
+        config['out_term_path'] + "/{rep}_{cond}/groups.txt"
+    params:
+        term_path=config["term_path"] + "/target/release/terminus",
+        partition = get_partition('run_term_group'),
+        output = config['out_term_path'],
+        input = config['out_sal_path'] + "/{rep}_{cond}"
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output}  --thr false"
+
+
+
+rule run_salmon:
+    input:
+        inp_fastq1 = config['read_path'] + "/{rep}/sample_0{cond}_1.fasta",
+        inp_fastq2 = config['read_path'] + "/{rep}/sample_0{cond}_2.fasta",
+        index = config['sal_ind_path'] + "/pos.bin"
+    output:
+        out_sal = config['out_sal_path'] + "/{rep}_{cond}/quant.sf"
+    resources: cpus=10, mem=32000
+    params:
+        out_dir = config['out_sal_path'] + "/{rep}_{cond}",
+        partition = get_partition('run_salmon'),
+        sal_path = config['sal_path'],
+        sal_ind = config['sal_ind_path']
+    shell:
+        "{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias "
+        "--numGibbsSamples 100 --thinningFactor 100 -d "
+        "-o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}"
+
+rule build_sal_ind:
+    input:config['txp_fasta']
+    output:config['sal_ind_path'] + "/pos.bin"
+    params:
+        out_ind_path = config['sal_ind_path'],
+        partition = get_partition('build_sal_ind'),
+        sal_path = config['sal_path']
+    resources:cpus=10, mem=32000
+    shell:
+        """
+           {params.sal_path} index --keepDuplicates -p {resources.cpus} -t {input} -i {params.out_ind_path}
+        """
+
+rule make_reads:
+    input:
+        sim="/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/brain_sim/simulate.rda",
+    params:
+	    reads = "{rep}",
+	    fasta_path = config['txp_fasta'],
+	    out_path = config['read_path'],
+	    partition = get_partition('make_reads')
+    output:
+        expand(config["read_path"] + "/{{rep}}/sample_0{cond}_{read}.fasta",  cond=[1,2], read=[1,2])
+    shell:
+        """
+            source ~/.bashrc
+            conda activate R4.1
+            Rscript --vanilla simulate_reads.R {params.reads} {params.fasta_path} {params.out_path}
+        """
