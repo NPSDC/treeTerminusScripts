@@ -1,0 +1,65 @@
+---
+title: "Missing txps"
+author: "Noor Pratap Singh"
+date: "10/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim/simulate.rda")
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/tAfterqval.RData")
+load("environment/brain_sim/tAfterqvalNoSign.RData")
+load("environment/brain_sim/tAfterqvalNoStop.RData")
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+```
+
+#### Level distribution
+```{r}
+print(sapply(tAfterqval, function(node) table(levels[node[["candNodeO"]]])))
+print(sapply(tAfterqvalNoSign, function(node) table(levels[node[["candNodeO"]]])))
+print(sapply(tAfterqvalNoStop, function(node) table(levels[node[["candNodeO"]]])))
+```
+
+#### NTxps
+```{r}
+dtus <- intersect(names(iso.dtu)[iso.dtu], rownames(y))
+dtuInds <- match(dtus, rownames(y))
+print(sapply(c(0.01, 0.05, 0.1), function(fdr) sum(mcols(y)[["qvalue"]] <= fdr)))
+print(sapply(tAfterqval, function(node) length(unlist(Descendants(tree, node[["candNodeO"]])))))
+print(sapply(tAfterqvalNoSign, function(node) length(unlist(Descendants(tree, node[["candNodeO"]])))))
+print(sapply(tAfterqvalNoStop, function(node) length(unlist(Descendants(tree, node[["candNodeO"]])))))
+```
+While for 0.01, we have more transcripts given by our method but the once fdr increases the txps given by our method begin to decrease
+
+```{r}
+alphas <- c(0.01, 0.05, 0.1)
+missing <- lapply(seq_along(tAfterqvalNoStop), function(i) setdiff(which(mcols(y)[["qvalue"]] <= alphas[i]), unlist(Descendants(tree, tAfterqvalNoStop[[i]][["candNodeO"]]))))
+print(sapply(missing, length))
+sapply(missing, function(x) mean(x %in% dtuInds))
+```
+Approximately 67 and 49% that are missing from swish run for 0.05 and 0.1 qvalue cutoff aare are actually differentially expressed transcripts
+
+#### Looking at 0.05 region
+```{r}
+plot(mcols(y)[["log2FC"]][missing[[2]]], -log10(mcols(y)[["qvalue"]][missing[[2]]]))
+print(min(mcols(y)[["qvalue"]][missing[[2]]]))
+print(max(mcols(y)[["qvalue"]][missing[[2]]]))
+
+print(mean(tAfterqvalNoStop[[2]][["resDf"]][match(missing[[2]], tAfterqvalNoStop[[2]][["resDf"]][["inds"]]),2] < 0.1))
+print(mean(tAfterqvalNoStop[[2]][["resDf"]][match(missing[[2]], tAfterqvalNoStop[[2]][["resDf"]][["inds"]]),2] < 0.07))
+print(max(tAfterqvalNoStop[[2]][["resDf"]][match(missing[[2]], tAfterqvalNoStop[[2]][["resDf"]][["inds"]]),2]))
+```
+the minimum qvalue in the actual swish fit on the txps is 0.016, all the txps dont have that low qvalues
+Looking these transcripts in the new qvalue fit we see that 63% have qvalue < 0.07 and 97% have qvalue < 0.1, with the max adjusted pvalue being 0.21

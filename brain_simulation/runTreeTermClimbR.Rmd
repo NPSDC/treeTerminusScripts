@@ -1,0 +1,108 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+```
+
+#### Distribution of signs and levels
+```{r}
+minInfRV <- 0.20
+nLeaf <- length(tree$tip)
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+<!-- #### Running IHW -->
+<!-- ```{r} -->
+<!-- df <- data.frame(IRVCut = cut(mcols(yAll)[["meanInfRV"]], breaks = quantile(mcols(yAll)[["meanInfRV"]], 0:4/4), include.lowest = T), -->
+<!--                  levels, pvalue = mcols(yAll)[["pvalue"]], infRVs = mcols(yAll)[["meanInfRV"]]) -->
+<!-- table(df[["IRVCut"]]) -->
+<!-- res <- ihw(pvalue ~ IRVCut,  data = df, -->
+<!--            alpha = 0.1, -->
+<!--            covariate_type = "ordinal") -->
+<!-- print(sum(mcols(yAll)[["qvalue"]] < 0.1)) -->
+<!-- print(rejections(res)) -->
+<!-- plot(res) -->
+<!-- ``` -->
+
+#### Running tree Terminus Climber  
+```{r}
+# tBefore <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), compPThresh = T, cores = 3)
+# save(tBefore, file = "environment/Chimp/no_thresh/updated_tcr/tBefore.RData")
+
+# print("tAfterIHW")
+# print(system.time(tAfterIHW <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
+# save(tAfterIHW, file = "environment/brain_sim/tAfterIHW.RData")
+
+# print("tAfterIHWNoStop")
+# print(system.time(tAfterIHWNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+# save(tAfterIHWNoStop, file = "environment/brain_sim/tAfterIHWNoStop.RData")
+
+# print("tAfterIHWNoThresh")
+# print(system.time(tAfterIHWNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+# save(tAfterIHWNoSign, file = "environment/brain_sim/tAfterIHWNoSign.RData")
+```
+
+
+### Qvalue
+```{r}
+print("tAfterqval")
+print(system.time(tAfterqval <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
+save(tAfterqval, file = "environment/brain_sim/tAfterqval.RData")
+
+print("tAfterqvalNoStop")
+print(system.time(tAfterqvalNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+save(tAfterqvalNoStop, file = "environment/brain_sim/tAfterqvalNoStop.RData")
+
+print("tAfterqvalNoThresh")
+print(system.time(tAfterqvalNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+save(tAfterqvalNoSign, file = "environment/brain_sim/tAfterqvalNoSign.RData")
+```
+
+#### BH
+```{r}
+print("tAfterBH")
+print(system.time(tAfterBH <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
+save(tAfterBH, file = "environment/brain_sim/tAfterBH.RData")
+
+print("tAfterBHNoStop")
+print(system.time(tAfterBHNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+save(tAfterBHNoStop, file = "environment/brain_sim/tAfterBHNoStop.RData")
+
+print("tAfterBHNoThresh")
+print(system.time(tAfterBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+save(tAfterBHNoSign, file = "environment/brain_sim/tAfterBHNoSign.RData")
+```
+
+#### Distribution of nodes
+```{r}
+# print(sapply(c(0.01, 0.05, 0.1), function(x) sum(mcols(y)[["qvalue"]] < x)))
+# 
+# print(sapply(tBefore, function(node) table(levels[node[["candNodeO"]]])))
+# print(sapply(tAfter, function(node) table(levels[node[["candNodeO"]]])))
+# 
+# print(sapply(tBeforeNoStop, function(node) table(levels[node[["candNodeO"]]])))
+# print(sapply(tAfterNoStop, function(node) table(levels[node[["candNodeO"]]])))
+```

@@ -1,0 +1,101 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+# load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/simulate.rda")
+load("environment/brain_sim/tAfterIHW.RData")
+load("environment/brain_sim/tAfterIHWNoSign.RData")
+load("environment/brain_sim/tAfterIHWNoStop.RData")
+load("environment/brain_sim/tAfterBH.RData")
+load("environment/brain_sim/tAfterBHNoSign.RData")
+load("environment/brain_sim/tAfterBHNoStop.RData")
+load("environment/brain_sim/tAfterqval.RData")
+load("environment/brain_sim/tAfterqvalNoSign.RData")
+load("environment/brain_sim/tAfterqvalNoStop.RData")
+
+load("environment/brain_sim/tbeforeqval.RData")
+load("environment/brain_sim/tbeforeqvalNoSign.RData")
+load("environment/brain_sim/tbeforeqvalNoStop.RData")
+load("environment/brain_sim/tbeforeIHW.RData")
+load("environment/brain_sim/tbeforeIHWNoStop.RData")
+#load("environment/brain_sim/tbeforeqvalNoStop.RData")
+```
+
+```{r}
+innNodes <- nrow(y)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat[tree$tip,])
+missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+length(missingTxps)
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+print(logFCNodes[nrow(y)+1])
+print(mean(abs(logFCNodes[dtus]) > 0.02))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterIHW"]] <- lapply(tAfterIHW, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterIHWNoSign"]] <- lapply(tAfterIHWNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterIHWNoStop"]] <- lapply(tAfterIHWNoStop, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterBH"]] <- lapply(tAfterBH, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterBHNoSign"]] <- lapply(tAfterBHNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterBHNoStop"]] <- lapply(tAfterBHNoStop, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqval"]] <- lapply(tAfterqval, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterqvalNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterqvalNoStop, function(ta) ta[["candNodeO"]])
+
+detNodes[["tbeforeIHW"]] <- lapply(tbeforeIHW, function(ta) ta[["candNodeO"]])
+detNodes[["tbeforeIHWNoStop"]] <- lapply(tbeforeIHWNoStop, function(ta) ta[["candNodeO"]])
+detNodes[["tbeforeqval"]] <- lapply(tbeforeqval, function(ta) ta[["candNodeO"]])
+detNodes[["tbeforeqvalNoSign"]] <- lapply(tbeforeqvalNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tbeforeqvalNoStop"]] <- lapply(tbeforeqvalNoStop, function(ta) ta[["candNodeO"]])
+```
+
+```{r}
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] >= x ))
+negNodes[["tAfterIHW"]] <- lapply(tAfterIHW, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterIHWNoSign"]] <- lapply(tAfterIHWNoSign, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterIHWNoStop"]] <- lapply(tAfterIHWNoStop, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterBH"]] <- lapply(tAfterBH, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterBHNoSign"]] <- lapply(tAfterBHNoSign, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterBHNoStop"]] <- lapply(tAfterBHNoStop, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterqval"]] <- lapply(tAfterBH, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterqvalNoSign, function(ta) ta[["negNodeO"]])
+negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterqvalNoStop, function(ta) ta[["negNodeO"]])
+
+negNodes[["tbeforeIHW"]] <- lapply(tbeforeIHW, function(ta) ta[["negNodeO"]])
+negNodes[["tbeforeIHWNoStop"]] <- lapply(tbeforeIHWNoStop, function(ta) ta[["negNodeO"]])
+negNodes[["tbeforeqval"]] <- lapply(tbeforeqval, function(ta) ta[["negNodeO"]])
+negNodes[["tbeforeqvalNoSign"]] <- lapply(tbeforeqvalNoSign, function(ta) ta[["negNodeO"]])
+negNodes[["tbeforeqvalNoStop"]] <- lapply(tbeforeqvalNoStop, function(ta) ta[["negNodeO"]])
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = 0.023))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+<!-- ```{r} -->
+<!-- print(length(unlist(Descendants(tree,tAfterIHWStop[["candNodeO"]],"tip")))) -->
+<!-- ``` -->

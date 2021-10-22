@@ -1,0 +1,162 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+### Reading data
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(library(qvalue))
+suppressPackageStartupMessages(library(ggpubr))
+# 
+# quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_sal"
+# samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
+# files <- file.path(quantDir, samples, "quant.sf")
+# colData <- data.frame(files = files, names = samples, condition = as.factor(rep(c(1,2),each=6)))
+# seBrainSim <- tximeta::tximeta(colData)
+# save(seBrainSim, file = "environment/brain_sim/seBrainSim.RData")
+# 
+# trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_term/cluster_nwk.txt")
+# tLengths <- sapply(trees, function(x) length(x$tip.label))
+# tree <- mergeTree(trees, se = seBrainSim)
+```
+
+### Running Swish
+```{r}
+# y <- scaleInfReps(seBrainSim)
+# y <- labelKeep(y)
+# y <- runSwishtree(tree, y, type = "union")
+# 
+# modOb <- mergeLeaves(tree, y)
+# tree <- modOb[["tree"]]
+# y <- modOb[["ySwish"]]
+# save(y, file = "environment/brain_sim/y.RData")
+# save(tree, file = "environment/brain_sim/tree.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/y.RData")
+```
+
+#### Analyzing DTE
+```{r}
+load("environment/brain_sim/simulate.rda")
+hist(mcols(y)[["pvalue"]])
+
+print(sum(iso.dtu))
+dtus <- names(iso.dtu)[iso.dtu]
+print(sum(dtus %in% rownames(y)))
+print(sum(mcols(y)[["qvalue"]] <= 0.1))
+
+qvals <- qvalue(mcols(y)[["pvalue"]])
+print(qvals[["pi0"]])
+mcols(y)[["qPack"]] <- qvals[["qvalues"]]  ### qvalues computed using qvalue package
+```
+Around 4150 txps with DTU, out of which swish reports 3055 as differentially expressed at qvalue 0.1. 3892 out of 4150 considered for dte anaylsis, remaining are filtered out
+
+#### IHW function
+```{r}
+library(IHW)
+doIHW <- function(y, nbin = 4, type = NULL, group = T, alpha = 0.1)
+{
+    mCount <- rowMeans(assays(y)[["counts"]])
+    dfIHW <- data.frame(IRVCut = cut(mcols(y)[["meanInfRV"]], breaks = quantile(mcols(y)[["meanInfRV"]], 0:nbin/nbin), include.lowest = T),
+                 mCCut = cut(mCount, breaks = quantile(mCount, 0:nbin/nbin), include.lowest = T),
+                 pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]], mCount = mCount)
+    dfIHW[["group"]] <- factor(paste(dfIHW[["IRVCut"]], dfIHW[["mCCut"]]))
+    if(group==T)
+        return(ihw(pvalue ~ group, data = dfIHW, alpha = alpha, covariate_type = "nominal"))
+    else
+    {
+        if(type=="count")
+            return(ihw(pvalue ~ mCount, data = dfIHW, alpha = alpha, covariate_type = "ordinal", nbins=nbin))
+        else
+            return(ihw(pvalue ~ infRVs, data = dfIHW, alpha = alpha, covariate_type = "ordinal", nbins=nbin))
+    }
+}
+
+```
+
+<!-- #### Running IHW -->
+<!-- ```{r} -->
+<!-- suppressPackageStartupMessages(library(IHW)) -->
+<!-- mCount <- rowMeans(assays(y)[["counts"]]) -->
+<!-- nbin=4 -->
+<!-- dfIHW <- data.frame(IRVCut = cut(mcols(y)[["meanInfRV"]], breaks = quantile(mcols(y)[["meanInfRV"]], 0:nbin/nbin), include.lowest = T), -->
+<!--                  mCCut = cut(mCount, breaks = quantile(mCount, 0:nbin/nbin), include.lowest = T), -->
+<!--                  pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]], mCount = mCount) -->
+<!-- dfIHW[["group"]] <- factor(paste(dfIHW[["IRVCut"]], dfIHW[["mCCut"]])) -->
+
+<!-- resgroupInfCount <- lapply(c(0.01, 0.05, 0.1), function(alpha) ihw(pvalue ~ group, data = dfIHW, alpha = alpha, covariate_type = "nominal")) -->
+<!-- resgroupCount <- lapply(c(0.01, 0.05, 0.1), function(alpha) ihw(pvalue ~ mCount, data = dfIHW, alpha = alpha, covariate_type = "ordinal", nbins=4)) -->
+<!-- resgroupInf <- lapply(c(0.01, 0.05, 0.1), function(alpha) ihw(pvalue ~ infRVs, data = dfIHW, alpha = alpha, covariate_type = "ordinal", nbins=4)) -->
+
+<!-- resDfInfCount <- lapply(resgroupInfCount, as.data.frame) -->
+<!-- resDfCount <- lapply(resgroupCount, as.data.frame) -->
+<!-- resDfInf <- lapply(resgroupInf, as.data.frame) -->
+<!-- ``` -->
+
+<!-- #### Detected Nodes -->
+<!-- ```{r} -->
+<!-- tLeaf <- match(intersect(dtus, rownames(y)), rownames(y)) -->
+<!-- detNodes <- list() -->
+<!-- detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x )) -->
+<!-- detNodes[["SwishQ"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qPack"] <= x )) -->
+<!-- detNodes[["IHWInfCount"]] <- mapply(function(df, qval) which(df[["adj_pvalue"]] <= qval), resDfInfCount, c(0.01, 0.05, 0.1)) -->
+<!-- detNodes[["IHWCount"]] <- mapply(function(df, qval) which(df[["adj_pvalue"]] <= qval), resDfCount, c(0.01, 0.05, 0.1)) -->
+<!-- detNodes[["IHWInf"]] <- mapply(function(df, qval) which(df[["adj_pvalue"]] <= qval), resDfInf, c(0.01, 0.05, 0.1)) -->
+<!-- ``` -->
+
+<!-- #### Performance on leafs -->
+<!-- ```{r} -->
+<!-- df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric()) -->
+<!-- for(i in seq_along(detNodes)) -->
+<!-- { -->
+<!--     stats <-  sapply(detNodes[[i]], function(nodes) computeTPFP(tLeaf, nodes, y, NULL, tree, type="leaf")) -->
+<!--     colnames(stats) <- colnames(df)[c(3:5)] -->
+<!--     stats <- cbind(Method=rep(names(detNodes)[i],2), Metric = c("FDR", "TPR"), stats) -->
+<!--     df <- rbind(df, stats) -->
+<!-- } -->
+<!-- print(df) -->
+<!-- ``` -->
+<!-- IHW does not increase TPR at other qvalues but FDR increases. -->
+
+#### Plotting IHW weight
+##### Varying bins for group infRV and count
+```{r fig.dim=c(10,10)}
+alphas <- c(0.01, 0.05, 0.1)
+resG <- lapply(alphas, function(alpha) doIHW(y, alpha=alpha, nbin = 4))
+resG <- lapply(resG, plot)
+ggarrange(plotlist=resG, common.legend=T, legend="bottom")
+
+resG <- lapply(alphas, function(alpha) doIHW(y, alpha=alpha, nbin = 3))
+resG <- lapply(resG, plot)
+ggarrange(plotlist=resG, common.legend=T, legend="bottom")
+```
+
+##### Varying bins for mean infRV
+```{r fig.dim=c(10,10)}
+alphas <- c(0.01, 0.05, 0.1)
+resG <- lapply(alphas, function(alpha) doIHW(y, alpha=alpha, type="infRV", group=F, nbin = 4))
+resG <- lapply(resG, plot)
+ggarrange(plotlist=resG, common.legend=T, legend="bottom")
+
+resG <- lapply(alphas, function(alpha) doIHW(y, alpha=alpha, type="infRV", group=F, nbin = 8))
+resG <- lapply(resG, plot)
+ggarrange(plotlist=resG, common.legend=T, legend="bottom")
+```
+
+##### Varying bins for count
+```{r fig.dim=c(10,10)}
+alphas <- c(0.01, 0.05, 0.1)
+resG <- lapply(alphas, function(alpha) doIHW(y, alpha=alpha, type="count", group=F, nbin = 4))
+resG <- lapply(resG, plot)
+ggarrange(plotlist=resG, common.legend=T, legend="bottom")
+
+resG <- lapply(alphas, function(alpha) doIHW(y, alpha=alpha, type="count", group=F, nbin = 8))
+resG <- lapply(resG, plot)
+ggarrange(plotlist=resG, common.legend=T, legend="bottom")
+```
