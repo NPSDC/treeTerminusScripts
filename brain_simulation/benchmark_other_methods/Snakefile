@@ -1,0 +1,46 @@
+import yaml
+configfile: "config.json"
+
+with open('cluster_partition.conf', 'r') as f:
+    partitions = yaml.safe_load(f)
+
+def get_partition(rule_name):
+    return partitions[rule_name] if rule_name in partitions else partitions['__default__']
+
+REPLICATES=config['replicates']
+
+rule run_terminus:
+    input:config['out_term_path'] + "/1_1/clusters.txt"
+        #p1 = expand(config['out_term'] + "/{run}/groups.txt", run=up_runs),
+    params:
+        partition = get_partition('run_terminus')
+
+rule run_term_collapse:
+    input:
+        expand(config['out_term_path'] + "/{rep}_{cond}/groups.txt", rep=REPLICATES, cond=[1,2])
+    output:
+        config['out_term_path'] + "/1_1/clusters.txt"
+    params:
+        term_path=config["term_path"],
+        input=expand(config['out_sal_path'] + "/{rep}_{cond}", rep=REPLICATES, cond=[1,2]),
+        output = config['out_term_path'],
+        partition = get_partition('run_term_collapse')
+    shell:
+        """
+            cd {params.term_path}
+            target/release/terminus collapse -c 0.5 -d {params.input} -o {params.output}
+            cd -
+        """
+
+rule run_term_group:
+    input:
+        config['out_sal_path'] + "/{rep}_{cond}/quant.sf"
+    output:
+        config['out_term_path'] + "/{rep}_{cond}/groups.txt"
+    params:
+        term_path=config["term_path"] + "/target/release/terminus",
+        partition = get_partition('run_term_group'),
+        output = config['out_term_path'],
+        input = config['out_sal_path'] + "/{rep}_{cond}"
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output}"

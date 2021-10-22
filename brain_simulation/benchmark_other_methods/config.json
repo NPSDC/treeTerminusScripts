@@ -1,0 +1,10 @@
+{
+    "replicates":[1,2,3,4,5,6],
+    "read_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/reads_fastq",
+    "txp_fasta":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation/transcripts.fa",
+    "sal_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/Chimpanzee/no_thresh_boot/.snakemake/conda/b5dc9e9ebd55a53225f40312a659f7a2/bin/salmon",
+    "sal_ind_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation/sal_ind",
+    "out_sal_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_sal",
+    "out_term_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_term_hirak",
+    "term_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/term_hirak/terminus"
+}
