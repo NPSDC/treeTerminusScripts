@@ -78,13 +78,13 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, 
         if(all(!nodeSig[desc])) ## All are non signficant
         {
             pIRV <- mInfRV[parent]
-            # cIRV <- mInfRV[children]
+            cIRV <- mInfRV[children]
             # diff <- pIRV - mean(cIRV)
             # if(diff <= infDiff)
             # if(pIRV >= minInfRV)
             #     return(T)\
             if(temp) {
-                if(all(cIRV) >= mInfRV)
+                if(all(cIRV) >= minInfRV)
                     return(T)    
             }
                 
@@ -174,7 +174,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
 
 
 runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 0.05, corr = "IHW", runType = c("a"), alphas = c(0.01, 0.05, 0.1), 
-                              compPThresh = T, cSign = T, cores = 1)
+                              compPThresh = T, cSign = T, cores = 1, temp = T)
 {
     library(qvalue)
     if(!corr %in% c("qvalue", "IHW", "BH"))
@@ -206,7 +206,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             j=i
             if(corr != "IHW")
                 j=1
-            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[j]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign)
+            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[j]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign, temp=temp)
         }, mc.cores = cores)
         
         for(i in seq_along(alphas))
@@ -225,7 +225,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             else
                 pThresh <- pCutOff
             print(pThresh)
-            runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign)
+            runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign, temp=temp)
         }, mc.cores = cores)
         
         if (corr == "IHW") {
