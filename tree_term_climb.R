@@ -64,7 +64,7 @@ estimatePThresh <- function(y, adjPval = 0.05) {
     return(pvalues[adPval])
 }
 
-checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig)
+checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, temp = F)
 {
     if(parent > length(mInfRV) | any(desc > length(mInfRV)))
         stop("Invalid parent or child indexes")
@@ -81,8 +81,14 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig)
             # cIRV <- mInfRV[children]
             # diff <- pIRV - mean(cIRV)
             # if(diff <= infDiff)
-            if(pIRV >= minInfRV)
-                return(T)
+            # if(pIRV >= minInfRV)
+            #     return(T)\
+            if(temp) {
+                if(all(cIRV) >= mInfRV)
+                    return(T)    
+            }
+                
+            
             #print("irv")
             return(F)
         }
@@ -277,7 +283,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
     return(sols)
 }
 
-runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T)
+runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T, temp=T)
 {
     nodeSig <- rep(T, nrow(y)) ### node signficant or not
     nodeSig[pvalue > pChild] = F
@@ -310,7 +316,12 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
             desc <- unlist(Descendants(tree,p,"all"))
             if(any(nodesLooked[desc]))
                 break()
-            if(!checkGoUp(p, desc, child, signs, mcols(y)[["meanInfRV"]], minInfRV, nodeSig))
+            if(!temp) {
+                if(mcols(y)[["meanInfRV"]][curNode] <= minInfRV)
+                    break()
+            }
+                
+            if(!checkGoUp(p, desc, child, signs, mcols(y)[["meanInfRV"]], minInfRV, nodeSig, temp=temp))
             #if(!checkGoUp(p, desc, child, signs, mInfRV, infDiff, nodeSig))
                 break()
             foundCand <- T
