@@ -1,0 +1,43 @@
+---
+title: "TreeClimbR"
+author: "Noor Pratap Singh"
+date: "10/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(treeclimbR))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/tree.RData")
+
+swishRes <- data.frame(mcols(yAll))
+swishRes$node <- seq(1:nrow(yAll))
+swishRes <- swishRes[,-c(2)] ### Removing keep
+
+print(system.time(cSwish <- getCand(tree,
+                 score_data = swishRes,
+                 node_column = "node",
+                 p_column = "pvalue",
+                 sign_column = "log2FC")))
+save(cSwish, file = "environment/brain_sim/benchmark/cSwish.RData")
+# gc()
+bSwish <- list()
+print(system.time(bSwish[["0.01"]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=0.01)))
+print(system.time(bSwish[["0.05"]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=0.05)))
+print(system.time(bSwish[["0.1"]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=0.1)))
+save(bSwish, file = "environment/brain_sim/benchmark/bSwish.RData")
+gc()
+
+```

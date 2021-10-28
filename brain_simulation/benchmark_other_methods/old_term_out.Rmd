@@ -1,0 +1,79 @@
+---
+title: "Old Terminus"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("old_terminus_helper.R"))
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/seBrainSim.RData")
+```
+
+
+#### Loading cluster file
+```{r}
+clFile <- "../brain_sim/out_term_hirak/1_1/clusters.txt"
+groups <- parseClustFile(clFile, y)
+
+print(hist(sapply(groups,length)))
+print(summary(sapply(groups,length)))
+print(sum(sapply(groups,length)))
+print(length(groups))
+```
+A total of 11383 transcripts covered by terminus with a total of 4717 groups
+
+#### Preparing Swish
+```{r}
+mtxps <- setdiff(seq(nrow(y)), unlist(groups))
+mInds <- c(mtxps, max(mtxps) + 1:length(groups))
+yAll <- prepSwish(y, mInds, groups)
+yAll <- scaleInfReps(yAll, lengthCorrect = T)
+yAll <- labelKeep(yAll)
+mcols(yAll)$keep=T
+yAll <- swish(yAll, x = "condition")
+yAll <- computeInfRV(yAll)
+save(yAll, file = "environment/brain_sim/benchmark/term_hirak_yAll.RData")
+```
+
+#### Looking at dtes
+```{r}
+alphas <- c(0.01, 0.05, 0.1)
+dts <- sapply(alphas, function(alpha) which(mcols(yAll)[["qvalue"]] <= alpha)) ###Differentially transcript groups
+print(sapply(dts, length))
+print(sapply(dts, function(dts) sum(dts > length(mtxps))))
+
+dtAll <- lapply(dts, function(dt) extractTxpGroup(yAll, y, groups, dt, length(mtxps)))
+print(sapply(dtAll, length))
+```
+Number of differential subgroups much larger than treeTerminus
+
+#### Computing the metrics
+```{r}
+load("environment/brain_sim/simulate.rda")
+aggCountsNodes <- computeAggNodesU(groups, mInds, sim.counts.mat[rownames(y),], NULL)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+
+detNodes <- list()
+detNodes[["terminus_orig"]] <- dts
+negNodes <- list()
+negNodes[["terminus_orig"]] <- lapply(dts, function(dt) setdiff(seq(nrow(yAll)), dt))
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = 0.023))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+
+```

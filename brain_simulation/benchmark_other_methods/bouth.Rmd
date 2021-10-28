@@ -1,0 +1,24 @@
+---
+title: "Run BOUTH"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(BOUTH))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+load("environment/brain_sim/benchmark/bouthTree.RData")
+load("environment/brain_sim/y.RData")
+
+pvalues <- mcols(y)[["pvalue"]]
+bouth_brain <- list()
+print(system.time(bouth_brain[['0.01']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.01, is.weighted = TRUE)))
+save(bouth_brain, file = "environment/brain_sim/benchmark/bouthBrain.RData")
+print(system.time(bouth_brain[['0.05']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.05, is.weighted = TRUE)))
+print(system.time(bouth_brain[['0.1']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.1, is.weighted = TRUE)))
+save(bouth_brain, file = "environment/brain_sim/benchmark/bouthBrain.RData")
+```
