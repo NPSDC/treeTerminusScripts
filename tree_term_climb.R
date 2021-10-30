@@ -84,17 +84,16 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, 
             # if(pIRV >= minInfRV)
             #     return(T)\
             if(temp) {
-                if(all(cIRV) >= minInfRV)
-                    return(T)    
+                if(all(cIRV >= minInfRV))
+                    return(T)
+                #print("infRV")
+                return(F)
             }
-                
-            
-            #print("irv")
-            return(F)
+            return(T)
         }
         else
         {
-            #print("significant")
+         #   print("significant")
             return(F)
         }
             
@@ -112,8 +111,15 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
     levels <- node.depth(tree, 2)
     levels <- ifelse(levels > 4, 5, levels)
     mCount <- rowMeans(assays(y)[["counts"]])
+    mCCut = tryCatch( {
+            cut(mCount, breaks = quantile(mCount, 0:mCountBin/mCountBin), include.lowest = T)
+    }, 
+    error=function(cond) {
+        message("Changing bins to 2 since 4 gave an error")
+        return(cut(mCount, breaks = quantile(mCount, 0:2/2), include.lowest = T))
+    })
     df <- data.frame(IRVCut = cut(mcols(y)[["meanInfRV"]], breaks = quantile(mcols(y)[["meanInfRV"]], 0:iRVBin/iRVBin), include.lowest = T),
-                     mCCut = cut(mCount, breaks = quantile(mCount, 0:mCountBin/mCountBin), include.lowest = T),
+                     mCCut = mCCut,
                      levels, pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]], mCount = mCount)
     if(group)
         df[["group"]] <- factor(paste(df[["IRVCut"]], df[["mCCut"]]))
@@ -174,7 +180,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
 
 
 runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 0.05, corr = "IHW", runType = c("a"), alphas = c(0.01, 0.05, 0.1), 
-                              compPThresh = T, cSign = T, cores = 1, temp = T)
+                              compPThresh = T, cSign = T, cores = 1, temp = T, file=NULL)
 {
     library(qvalue)
     if(!corr %in% c("qvalue", "IHW", "BH"))
@@ -227,7 +233,8 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             print(pThresh)
             runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign, temp=temp)
         }, mc.cores = cores)
-        
+        if(!is.null(file))
+            save(nSol, file = file)
         if (corr == "IHW") {
             resAlphas <- mclapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[[i]][["nodesLooked"]]), mc.cores = cores)
             gc()
