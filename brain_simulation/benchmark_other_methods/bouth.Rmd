@@ -11,9 +11,12 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 ```{r}
 suppressPackageStartupMessages(library(BOUTH))
 suppressPackageStartupMessages(library(SummarizedExperiment))
-load("environment/brain_sim/benchmark/bouthTree.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim/tree.RData")
 load("environment/brain_sim/y.RData")
 
+bouthTree <- getTreeDf(tree)
+save(bouthTree, file="environment/brain_sim/benchmark/bouthTree.RData")
 pvalues <- mcols(y)[["pvalue"]]
 bouth_brain <- list()
 print(system.time(bouth_brain[['0.01']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.01, is.weighted = TRUE)))
