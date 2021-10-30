@@ -11,7 +11,11 @@ extractBouthNodes <- function(bouth_ob, se, type = "driver") {
         {
             if(detNodes[i,j]!=" " & detNodes[i,j+1]==" ")
             {
-                det <- c(det, as.numeric(detNodes[i,j]))
+                node <- detNodes[i,j]
+                if(node=="Root")
+                    det <- nrow(y)+1
+                else
+                    det <- c(det, as.numeric(detNodes[i,j]))
                 break()
             }
 
