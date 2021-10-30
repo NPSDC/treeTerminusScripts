@@ -15,30 +15,26 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 #### Reading the nwk tree
 ```{r}
 suppressPackageStartupMessages(source("tree_helper_function.R"))
-load("environment/brain_sim/seBrainSim.RData")
 trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_term/cluster_nwk.txt")
 tLengths <- sapply(trees, function(x) length(x$tip.label))
 print(length(tLengths))
 print(max(tLengths))
 print(sum(tLengths >= 10))
 print(sum(sapply(trees, function(t) length(t$tip))))
-
-# mapDf <- data.frame(txps = rowData(seBrainSim), inds = seq(nrow(seBrainSim)))
-# save(mapDf, file = "environment/brain_sim/mapDf.RData")
 ```
-There are a total of 11456 trees, with 1110 groups containing atleast 10 txps and a group contains 182 txps. These groups span 55K txps
+There are a total of 14810 trees, with 4419 groups containing atleast 10 txps and a group contains 364 txps. These groups span 55K txps
 The final tree contains 66K txps
 
 #### Processing the data running swish
 ```{r}
 load("environment/brain_sim/y.RData")
 load("environment/brain_sim/tree.RData")
-# yAll <- prepSwish(tree, y)
-# yAll <- scaleInfReps(yAll, lengthCorrect = T)
-# yAll <- labelKeep(yAll)
-# mcols(yAll)$keep=T
-# yAll <- swish(yAll, x = "condition")
-# yAll <- computeInfRV(yAll)
-# hist(mcols(yAll)[["pvalue"]])
-save(yAll, file = "environment/barin_sim/yAll.RData")
+yAll <- prepSwish(tree, y)
+yAll <- scaleInfReps(yAll, lengthCorrect = T)
+yAll <- labelKeep(yAll)
+mcols(yAll)$keep=T
+yAll <- swish(yAll, x = "condition")
+yAll <- computeInfRV(yAll)
+hist(mcols(yAll)[["pvalue"]])
+save(yAll, file = "environment/brain_sim/yAll.RData")
 ```

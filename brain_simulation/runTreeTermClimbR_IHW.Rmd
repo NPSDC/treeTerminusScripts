@@ -52,17 +52,17 @@ print(table(signs, levels))
 # tBefore <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, ihwType = c("b"), alphas = c(0.01, 0.05, 0.10), compPThresh = T, cores = 3)
 # save(tBefore, file = "environment/Chimp/no_thresh/updated_tcr/tBefore.RData")
 
-# print("tAfterIHW")
-# print(system.time(tAfterIHW <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
-# save(tAfterIHW, file = "environment/brain_sim/tAfterIHW.RData")
+print("tAfterIHW")
+print(system.time(tAfterIHW <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, file="environment/brain_sim/tAfterIHW_incomp.RData")))
+save(tAfterIHW, file = "environment/brain_sim/tAfterIHW.RData")
 
-# print("tAfterIHWNoStop")
-# print(system.time(tAfterIHWNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-# save(tAfterIHWNoStop, file = "environment/brain_sim/tAfterIHWNoStop.RData")
+print("tAfterIHWNoStop")
+print(system.time(tAfterIHWNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, file="environment/brain_sim/tAfterIHWNoStop_incomp.RData")))
+save(tAfterIHWNoStop, file = "environment/brain_sim/tAfterIHWNoStop.RData")
 
-# print("tAfterIHWNoThresh")
-# print(system.time(tAfterIHWNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-# save(tAfterIHWNoSign, file = "environment/brain_sim/tAfterIHWNoSign.RData")
+print("tAfterIHWNoThresh")
+print(system.time(tAfterIHWNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, file="environment/brain_sim/tAfterIHWNoSign_incomp.RData")))
+save(tAfterIHWNoSign, file = "environment/brain_sim/tAfterIHWNoSign.RData")
 ```
 
 
@@ -90,10 +90,10 @@ print(table(signs, levels))
 # print("tAfterBHNoStop")
 # print(system.time(tAfterBHNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
 # save(tAfterBHNoStop, file = "environment/brain_sim/tAfterBHNoStop.RData")
-
-print("tAfterBHNoThresh")
-print(system.time(tAfterBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
-save(tAfterBHNoSign, file = "environment/brain_sim/tAfterBHNoSign.RData")
+# 
+# print("tAfterBHNoThresh")
+# print(system.time(tAfterBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+# save(tAfterBHNoSign, file = "environment/brain_sim/tAfterBHNoSign.RData")
 ```
 
 #### Distribution of nodes

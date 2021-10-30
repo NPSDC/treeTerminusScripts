@@ -12,7 +12,7 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 
 ```{r}
 suppressPackageStartupMessages(source("tree_helper_function.R"))
-suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(source("bouth_helper.R"))
 # load("environment/brain_sim/yAll.RData")
 load("environment/brain_sim/y.RData")
 load("environment/brain_sim/tree.RData")
@@ -23,6 +23,7 @@ load("environment/brain_sim/tAfterIHWNoStop.RData")
 load("environment/brain_sim/tAfterBH.RData")
 load("environment/brain_sim/tAfterBHNoSign.RData")
 load("environment/brain_sim/tAfterBHNoStop.RData")
+
 load("environment/brain_sim/tAfterqval.RData")
 load("environment/brain_sim/tAfterqvalNoSign.RData")
 load("environment/brain_sim/tAfterqvalNoStop.RData")
@@ -32,18 +33,26 @@ load("environment/brain_sim/tbeforeqvalNoSign.RData")
 load("environment/brain_sim/tbeforeqvalNoStop.RData")
 load("environment/brain_sim/tbeforeIHW.RData")
 load("environment/brain_sim/tbeforeIHWNoStop.RData")
+
+load("environment/brain_sim/benchmark/bSwish.RData")
+load("environment/brain_sim/benchmark/bouthBrain.RData")
 #load("environment/brain_sim/tbeforeqvalNoStop.RData")
 ```
 
 ```{r}
-innNodes <- nrow(y)+1:tree$Nnode
-aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat[tree$tip,])
 missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[rownames(y),]
 length(missingTxps)
+
+innNodes <- nrow(y)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
 logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
 dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
-print(logFCNodes[nrow(y)+1])
-print(mean(abs(logFCNodes[dtus]) > 0.02))
+rootFC <- logFCNodes[nrow(y)+1]
+print(mean(abs(logFCNodes[dtus]) > 0.023))
 ```
 
 ```{r}
@@ -59,11 +68,16 @@ detNodes[["tAfterqval"]] <- lapply(tAfterqval, function(ta) ta[["candNodeO"]])
 detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterqvalNoSign, function(ta) ta[["candNodeO"]])
 detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterqvalNoStop, function(ta) ta[["candNodeO"]])
 
+
 detNodes[["tbeforeIHW"]] <- lapply(tbeforeIHW, function(ta) ta[["candNodeO"]])
 detNodes[["tbeforeIHWNoStop"]] <- lapply(tbeforeIHWNoStop, function(ta) ta[["candNodeO"]])
 detNodes[["tbeforeqval"]] <- lapply(tbeforeqval, function(ta) ta[["candNodeO"]])
 detNodes[["tbeforeqvalNoSign"]] <- lapply(tbeforeqvalNoSign, function(ta) ta[["candNodeO"]])
 detNodes[["tbeforeqvalNoStop"]] <- lapply(tbeforeqvalNoStop, function(ta) ta[["candNodeO"]])
+
+
+# detNodes[["treeClimbR"]] <- lapply(bSwish, function(sw) sw$output[sw$output$signal.node,][["node"]])
+# detNodes[["bouth"]] <- lapply(bouth_brain, function(bouth) extractBouthNodes(bouth, y))
 ```
 
 ```{r}
@@ -75,7 +89,8 @@ negNodes[["tAfterIHWNoStop"]] <- lapply(tAfterIHWNoStop, function(ta) ta[["negNo
 negNodes[["tAfterBH"]] <- lapply(tAfterBH, function(ta) ta[["negNodeO"]])
 negNodes[["tAfterBHNoSign"]] <- lapply(tAfterBHNoSign, function(ta) ta[["negNodeO"]])
 negNodes[["tAfterBHNoStop"]] <- lapply(tAfterBHNoStop, function(ta) ta[["negNodeO"]])
-negNodes[["tAfterqval"]] <- lapply(tAfterBH, function(ta) ta[["negNodeO"]])
+
+negNodes[["tAfterqval"]] <- lapply(tAfterqval, function(ta) ta[["negNodeO"]])
 negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterqvalNoSign, function(ta) ta[["negNodeO"]])
 negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterqvalNoStop, function(ta) ta[["negNodeO"]])
 
@@ -85,10 +100,13 @@ negNodes[["tbeforeqval"]] <- lapply(tbeforeqval, function(ta) ta[["negNodeO"]])
 negNodes[["tbeforeqvalNoSign"]] <- lapply(tbeforeqvalNoSign, function(ta) ta[["negNodeO"]])
 negNodes[["tbeforeqvalNoStop"]] <- lapply(tbeforeqvalNoStop, function(ta) ta[["negNodeO"]])
 
+# negNodes[["treeClimbR"]] <- lapply(detNodes[["treeClimbR"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+# negNodes[["bouth"]] <- lapply(detNodes[["bouth"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+
 df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
 for(n in names(detNodes))
 {
-    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = 0.023))
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
     colnames(stats) <- colnames(df)[c(3:5)]
     stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
     df <- rbind(df, stats)
@@ -96,6 +114,13 @@ for(n in names(detNodes))
 print(df)
 ```
 
+```{r}
+qvalNodes <- lapply(tAfterqval, function(ta) c(ta[["negNodeO"]],ta[["candNodeO"]]))
+qvalNodesNoStop <- lapply(tAfterqvalNoStop, function(ta) c(ta[["negNodeO"]],ta[["candNodeO"]]))
+aa <- getGeneGroup(tree, qvalNodes[[1]], mapDf)
+ab <- getGeneGroup(tree, seq(nrow(y)), mapDf)
+getGeneCombPvalue(aa, y, "harmonic", "BH")
+```
 <!-- ```{r} -->
 <!-- print(length(unlist(Descendants(tree,tAfterIHWStop[["candNodeO"]],"tip")))) -->
 <!-- ``` -->

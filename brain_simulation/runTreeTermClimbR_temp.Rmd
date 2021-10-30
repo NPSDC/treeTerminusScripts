@@ -68,33 +68,48 @@ print(table(signs, levels))
 
 ### Qvalue
 ```{r}
-# print("tAfterqval")
-# print(system.time(tAfterqval <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)))
-# save(tAfterqval, file = "environment/brain_sim/tAfterqval.RData")
+print("tAfterqval")
+print(system.time(tAfterqvalTemp <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)))
+save(tAfterqvalTemp, file = "environment/brain_sim/temp/tAfterqval.RData")
 # 
-# print("tAfterqvalNoStop")
-# print(system.time(tAfterqvalNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-# save(tAfterqvalNoStop, file = "environment/brain_sim/tAfterqvalNoStop.RData")
+# # print("tAfterqvalNoStop")
+# # print(system.time(tAfterqvalNoStopTemp <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+# # save(tAfterqvalNoStop, file = "environment/brain_sim/temp/tAfterqvalNoStop.RData")
+# 
+print("tAfterqvalNoThresh")
+print(system.time(tAfterqvalNoSignTemp <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+save(tAfterqvalNoSignTemp, file = "environment/brain_sim/temp/tAfterqvalNoSign.RData")
+```
+
+### Qvalue
+```{r}
+# print("tAfterqval")
+# print(system.time(tAfterqvalNoTemp <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=F)))
+# save(tAfterqvalNoTemp, file = "environment/brain_sim/no_temp/tAfterqval.RData")
+# 
+# # print("tAfterqvalNoStop")
+# # print(system.time(tAfterqvalNoStopTemp <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+# # save(tAfterqvalNoStop, file = "environment/brain_sim/temp/tAfterqvalNoStop.RData")
 # 
 # print("tAfterqvalNoThresh")
-# print(system.time(tAfterqvalNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
-# save(tAfterqvalNoSign, file = "environment/brain_sim/tAfterqvalNoSign.RData")
+# print(system.time(tAfterqvalNoSignNoTemp <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=F)))
+# save(tAfterqvalNoSignNoTemp, file = "environment/brain_sim/no_temp/tAfterqvalNoSign.RData")
 ```
 
-#### BH
-```{r}
-# print("tAfterBH")
-# print(system.time(tAfterBH <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)))
-# save(tAfterBH, file = "environment/brain_sim/tAfterBH.RData")
-# 
-# print("tAfterBHNoStop")
-# print(system.time(tAfterBHNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
-# save(tAfterBHNoStop, file = "environment/brain_sim/tAfterBHNoStop.RData")
+<!-- #### BH -->
+<!-- ```{r} -->
+<!-- print("tAfterBH") -->
+<!-- print(system.time(tAfterBH <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T))) -->
+<!-- save(tAfterBH, file = "environment/brain_sim/tAfterBH.RData") -->
 
-print("tAfterBHNoThresh")
-print(system.time(tAfterBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
-save(tAfterBHNoSign, file = "environment/brain_sim/tAfterBHNoSign.RData")
-```
+<!-- print("tAfterBHNoStop") -->
+<!-- print(system.time(tAfterBHNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F))) -->
+<!-- save(tAfterBHNoStop, file = "environment/brain_sim/tAfterBHNoStop.RData") -->
+
+<!-- print("tAfterBHNoThresh") -->
+<!-- print(system.time(tAfterBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F))) -->
+<!-- save(tAfterBHNoSign, file = "environment/brain_sim/tAfterBHNoSign.RData") -->
+<!-- ``` -->
 
 #### Distribution of nodes
 ```{r}

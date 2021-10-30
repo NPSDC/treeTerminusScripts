@@ -1,0 +1,95 @@
+---
+title: "Gene Combined pvalues"
+author: "Noor Pratap Singh"
+date: "10/29/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim/tAfterqval.RData")
+load("environment/brain_sim/tAfterqvalNoStop.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/mapDf.RData")
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+```
+
+### Computing gene groups
+```{r}
+# qvalNodes <- lapply(tAfterqval, function(ta) c(ta[["negNodeO"]],ta[["candNodeO"]]))
+# qvalNodesNoStop <- lapply(tAfterqvalNoStop, function(ta) c(ta[["negNodeO"]],ta[["candNodeO"]]))
+
+# txpGeneGroup <- getGeneGroup(tree, seq(nrow(y)), mapDf)
+# save(txpGeneGroup, file = "environment/brain_sim/gene_group/txpGeneGroup.Rdata")
+# qvalGeneGroup <- mclapply(qvalNodes, function(nodes) getGeneGroup(tree, nodes, mapDf), mc.cores =3)
+# save(qvalGeneGroup, file = "environment/brain_sim/gene_group/qvalGeneGroup.Rdata")
+# qvalNoStopGeneGroup <- mclapply(qvalNodesNoStop, function(nodes) getGeneGroup(tree, nodes, mapDf), mc.cores = 3)
+# save(qvalNoStopGeneGroup, file = "environment/brain_sim/gene_group/qvalNoStopGeneGroup.Rdata")
+```
+
+### Computing pvalues
+```{r}
+# load("environment/brain_sim/gene_group/qvalGeneGroup.Rdata")
+load("environment/brain_sim/gene_group/combPvalsqval.Rdata")
+# combPvalsqval <- list()
+# combPvalsqval[["harmonic_BH"]] <- mclapply(qvalGeneGroup, function(gG) getGeneCombPvalue(gG, yAll, "harmonic", "BH"), mc.cores = 3)
+# save(combPvalsqval, file="environment/brain_sim/gene_group/combPvalsqval.Rdata")
+for(i in seq_along(combPvalsqval[["harmonic_BH"]]))
+    hist(combPvalsqval[["harmonic_BH"]][[i]])
+# 
+# combPvalsqval[["harmonic_NULL"]] <- mclapply(qvalGeneGroup, function(gG) getGeneCombPvalue(gG, yAll, "harmonic", NULL), mc.cores = 3)
+for(i in seq_along(combPvalsqval[["harmonic_NULL"]]))
+    hist(combPvalsqval[["harmonic_NULL"]][[i]])
+# save(combPvalsqval, file="environment/brain_sim/gene_group/combPvalsqval.Rdata")
+# 
+# combPvalsqval[["fisher_BH"]] <- mclapply(qvalGeneGroup, function(gG) getGeneCombPvalue(gG, yAll, "fisher", "BH"), mc.cores = 3)
+for(i in seq_along(combPvalsqval[["fisher_BH"]]))
+    hist(combPvalsqval[["fisher_BH"]][[i]])
+# save(combPvalsqval, file="environment/brain_sim/gene_group/combPvalsqval.Rdata")
+```
+
+### Computing pvalues
+```{r}
+# load("environment/brain_sim/gene_group/qvalNoStopGeneGroup.Rdata")
+load("environment/brain_sim/gene_group/combPvalsqvalNoStop.Rdata")
+# combPvalsqvalNoStop <- list()
+# combPvalsqvalNoStop[["harmonic_BH"]] <- mclapply(qvalNoStopGeneGroup, function(gG) getGeneCombPvalue(gG, yAll, "harmonic", "BH"), mc.cores = 3)
+# save(combPvalsqvalNoStop, file="environment/brain_sim/gene_group/combPvalsqvalNoStop.Rdata")
+for(i in seq_along(combPvalsqvalNoStop[["harmonic_BH"]]))
+    hist(combPvalsqvalNoStop[["harmonic_BH"]][[i]])
+# 
+# combPvalsqvalNoStop[["harmonic_NULL"]] <- mclapply(qvalNoStopGeneGroup, function(gG) getGeneCombPvalue(gG, yAll, "harmonic", NULL), mc.cores = 3)
+for(i in seq_along(combPvalsqvalNoStop[["harmonic_NULL"]]))
+    hist(combPvalsqvalNoStop[["harmonic_NULL"]][[i]])
+# save(combPvalsqvalNoStop, file="environment/brain_sim/gene_group/combPvalsqvalNoStop.Rdata")
+# 
+# combPvalsqvalNoStop[["fisher_BH"]] <- mclapply(qvalNoStopGeneGroup, function(gG) getGeneCombPvalue(gG, yAll, "fisher", "BH"), mc.cores = 3)
+for(i in seq_along(combPvalsqvalNoStop[["fisher_BH"]]))
+    hist(combPvalsqvalNoStop[["fisher_BH"]][[i]])
+# save(combPvalsqvalNoStop, file="environment/brain_sim/gene_group/combPvalsqvalNoStop.Rdata")
+```
+
+### Computing pvalues
+```{r}
+load("environment/brain_sim/gene_group/txpGeneGroup.Rdata")
+load("environment/brain_sim/gene_group/combPvalstxp.Rdata")
+combPvalstxp <- list()
+combPvalstxp[["harmonic_BH"]] <-  getGeneCombPvalue(txpGeneGroup, y, "harmonic", "BH")
+hist(combPvalstxp[["harmonic_BH"]])
+save(combPvalstxp, file="environment/brain_sim/gene_group/combPvalstxp.Rdata")
+
+combPvalstxp[["harmonic_NULL"]] <- getGeneCombPvalue(txpGeneGroup, y, "harmonic", NULL)
+hist(combPvalsqvaltxp[["harmonic_NULL"]])
+save(combPvalstxp, file="environment/brain_sim/gene_group/combPvalstxp.Rdata")
+
+combPvalstxp[["fisher_BH"]] <- getGeneCombPvalue(txpGeneGroup, y, "fisher", "BH")
+hist(combPvalstxp[["fisher_BH"]])
+save(combPvalstxp, file="environment/brain_sim/gene_group/combPvalstxp.Rdata")
+```

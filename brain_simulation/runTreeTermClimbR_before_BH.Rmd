@@ -49,17 +49,17 @@ print(table(signs, levels))
 
 #### Running tree Terminus Climber  
 ```{r}
-print("tbeforeIHW")
-print(system.time(tbeforeIHW <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
-save(tbeforeIHW, file = "environment/brain_sim/tbeforeIHW.RData")
-
-print("tbeforeIHWNoStop")
-print(system.time(tbeforeIHWNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-save(tbeforeIHWNoStop, file = "environment/brain_sim/tbeforeIHWNoStop.RData")
-
-print("tbeforeIHWNoThresh")
-print(system.time(tbeforeIHWNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-save(tbeforeIHWNoSign, file = "environment/brain_sim/tbeforeIHWNoSign.RData")
+# print("tbeforeIHW")
+# print(system.time(tbeforeIHW <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
+# save(tbeforeIHW, file = "environment/brain_sim/tbeforeIHW.RData")
+# 
+# print("tbeforeIHWNoStop")
+# print(system.time(tbeforeIHWNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+# save(tbeforeIHWNoStop, file = "environment/brain_sim/tbeforeIHWNoStop.RData")
+# 
+# print("tbeforeIHWNoThresh")
+# print(system.time(tbeforeIHWNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("IHW"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
+# save(tbeforeIHWNoSign, file = "environment/brain_sim/tbeforeIHWNoSign.RData")
 ```
 
 
@@ -80,17 +80,17 @@ save(tbeforeIHWNoSign, file = "environment/brain_sim/tbeforeIHWNoSign.RData")
 
 #### BH
 ```{r}
-# print("tbeforeBH")
-# print(system.time(tbeforeBH <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T)))
-# save(tbeforeBH, file = "environment/brain_sim/tbeforeBH.RData")
-# 
-# print("tbeforeBHNoStop")
-# print(system.time(tbeforeBHNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-# save(tbeforeBHNoStop, file = "environment/brain_sim/tbeforeBHNoStop.RData")
-# 
-# print("tbeforeBHNoThresh")
-# print(system.time(tbeforeBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F)))
-# save(tbeforeBHNoSign, file = "environment/brain_sim/tbeforeBHNoSign.RData")
+print("tbeforeBH")
+print(system.time(tbeforeBH <- runTreeTermAlphas(tree, yAll, "condition", minInfRV, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)))
+save(tbeforeBH, file = "environment/brain_sim/tbeforeBH.RData")
+
+print("tbeforeBHNoStop")
+print(system.time(tbeforeBHNoStop <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+save(tbeforeBHNoStop, file = "environment/brain_sim/tbeforeBHNoStop.RData")
+
+print("tbeforeBHNoThresh")
+print(system.time(tbeforeBHNoSign <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("BH"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+save(tbeforeBHNoSign, file = "environment/brain_sim/tbeforeBHNoSign.RData")
 ```
 
 #### Distribution of nodes

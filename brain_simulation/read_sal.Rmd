@@ -13,32 +13,45 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 suppressPackageStartupMessages(source("tree_helper_function.R"))
 suppressPackageStartupMessages(library(qvalue))
 suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(GenomicFeatures))
 # 
-# quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_sal"
-# samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
-# files <- file.path(quantDir, samples, "quant.sf")
-# colData <- data.frame(files = files, names = samples, condition = as.factor(rep(c(1,2),each=6)))
-# seBrainSim <- tximeta::tximeta(colData)
-# save(seBrainSim, file = "environment/brain_sim/seBrainSim.RData")
-# 
-# trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_term/cluster_nwk.txt")
-# tLengths <- sapply(trees, function(x) length(x$tip.label))
-# tree <- mergeTree(trees, se = seBrainSim)
+quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_sal"
+samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
+files <- file.path(quantDir, samples, "quant.sf")
+colData <- data.frame(files = files, names = samples, condition = as.factor(rep(c(1,2),each=6)))
+seBrainSim <- tximeta::tximeta(colData)
+
+
+txdb <- makeTxDbFromGFF(file="/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation/gencode.v26.annotation.gtf.gz")
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+
+tInds <- match(rownames(seBrainSim), tx2gene[,"TXNAME"])
+rowData(seBrainSim) <- tx2gene[tInds,c("GENEID", "TXNAME")]
+save(seBrainSim, file = "environment/brain_sim/seBrainSim.RData")
+
+mapDf <- cbind(rowData(seBrainSim), inds = seq(nrow(seBrainSim)))
+save(mapDf, file = "environment/brain_sim/mapDf.RData")
+
+trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/out_term/cluster_nwk.txt")
+tLengths <- sapply(trees, function(x) length(x$tip.label))
+tree <- mergeTree(trees, se = seBrainSim)
+
 ```
 
 ### Running Swish
 ```{r}
-# y <- scaleInfReps(seBrainSim)
-# y <- labelKeep(y)
-# y <- runSwishtree(tree, y, type = "union")
-# 
-# modOb <- mergeLeaves(tree, y)
-# tree <- modOb[["tree"]]
-# y <- modOb[["ySwish"]]
-# save(y, file = "environment/brain_sim/y.RData")
-# save(tree, file = "environment/brain_sim/tree.RData")
-load("environment/brain_sim/tree.RData")
-load("environment/brain_sim/y.RData")
+y <- scaleInfReps(seBrainSim)
+y <- labelKeep(y)
+y <- runSwishtree(tree, y, type = "union")
+
+modOb <- mergeLeaves(tree, y)
+tree <- modOb[["tree"]]
+y <- modOb[["ySwish"]]
+save(y, file = "environment/brain_sim/y.RData")
+save(tree, file = "environment/brain_sim/tree.RData")
+# load("environment/brain_sim/tree.RData")
+# load("environment/brain_sim/y.RData")
 ```
 
 #### Analyzing DTE
