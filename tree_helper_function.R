@@ -606,11 +606,72 @@ plotGene <- function(gene, y, gy, gg, tree, type = c("txp"), inds_consid)
     plotInfReps(gy, gene, x = "condition", main = paste("Gene ", gene))
   }
 }
-# ### Given a gene find the group/sub-group it belongs to within the tree that has the lowest qvalue or return NA if all txps are DTEs
-# ### mapdF list mapping gene to txps 
-# getGeneGroup <- function(tree, yAll, gene, mapDf, qvalue = 0.1) {
-#   if(! gene %in% names(mapDf))
-#     stop("invalid gene input")
-#   txps <- mapDf[[gene]]
-#   
-# }
+
+
+### Get a list of genes and their associated groups given by tree climbing algorithm
+getGeneGroup <- function(tree, nodes, mapDf) {
+  txpInds <- Descendants(tree, nodes, "tip")
+  genes <- lapply(txpInds, function(x) {
+      txps <- tree$tip[x]
+      unique(mapDf[txps, "GENEID"])
+    })
+  allG <- unique(unlist(genes))
+  geneGroups <- vector(mode="list", length=length(allG))
+  names(geneGroups) <- allG
+  for(i in seq_along(genes)) {
+    print(i)
+    for(g in genes[[i]])
+      geneGroups[[g]] <- c(geneGroups[[g]], nodes[i])
+  }
+  return(geneGroups)
+}
+  
+getGeneCombPvalue <- function(geneGroups, y, method = c("harmonic"), correct = c("BH")) {
+  library(metap)
+  library(harmonicmeanp)
+  library(qvalue)
+  
+  if(!method %in% c("harmonic", "fisher"))
+    stop("incorrect method entered")
+  if(!is.null(correct))
+  {
+    if(!correct %in% c("BH","qvalue"))
+      stop("incorrect correction enter")  
+  }
+  L <- length(unlist(geneGroups))
+  print(L)
+  pvalues <- sapply(geneGroups, function(g) {
+    pvals <- mcols(y)[g,"pvalue"]
+    if(method=="harmonic") {
+      if(is.null(correct))
+        p.hmp(pvals, L=L)
+      else
+        p.hmp(pvals, L=length(pvals))
+    }
+      
+    else {
+      if(length(pvals) > 1)
+        sumlog(pvals, log.p=F)[["p"]]
+      else
+        pvals
+    }
+      
+  })
+  if(!is.null(correct)) {
+    if(correct=="BH")
+      pvalues <- p.adjust(pvalues, method = "BH")
+    else
+      pvalues <- qvalue(pvalue)[["qvalues"]]
+  }
+   return(pvalues) 
+}
+
+fixDf <- function(df) {
+  library(tidyverse)
+  df <- data.frame(lapply(df, unlist))
+  df_gather <- df %>% gather(FDR, Value, 3:5) # the columns are not variables, but levels, so gather them
+  df_metrics <- df_gather %>% spread(Metric, Value) # we want TPR and FDR as cols
+  # can't do everything in one go bc of the following line, where we add back e.g. FDR_0.01
+  df_metrics$level <- sub("FDR_","",df_gather$FDR[2 * 1:nrow(df_metrics)])
+  return(df_metrics)
+}
