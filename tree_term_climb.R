@@ -75,7 +75,11 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, 
     #print(signDesc)
     if(all(signDesc >= 0) | all(signDesc <= 0))  ##same sign of children
     {
-        if(all(!nodeSig[desc])) ## All are non signficant
+        descPVal <- nodeSig[desc]
+        descNA <- which(is.na(descPVal))
+        descPVal <- descPVal[setdiff(seq_along(descPVal), descNA)]
+        
+        if(all(!descPVal)) ## All are non signficant
         {
             pIRV <- mInfRV[parent]
             cIRV <- mInfRV[children]
@@ -292,19 +296,18 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
 
 runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T, temp=T)
 {
-    nodeSig <- rep(T, nrow(y)) ### node signficant or not
+    nodeSig <- rep(T, nrow(y)) ### node significant or not
     nodeSig[pvalue > pChild] = F
+    nodeSig[is.na(pvalue)] = NA ### Setting pvalues for nodes to NA
     
-    tested <- rep(F, nrow(y)) ### tested or not (for IHW/qvalue/bonferroni)
     candNode <- rep(F, nrow(y)) ### Nodes that would be the output
     nodesLooked <- rep(F, nrow(y)) ### Nodes that we have already gone over and wont be going over any further
     negNode <- rep(F, nrow(y)) ### Nodes that are output as negative
-    nonSigLeaves <- intersect(seq_along(tree$tip.label), which(!nodeSig))
-    
+    nonSigLeaves <- intersect(seq_along(tree$tip.label), union(which(!nodeSig), which(is.na(nodeSig)))) ### we want to aggregate leaves with NA pvalues as well
+    print(length(nonSigLeaves))
     sigLeaves <- intersect(seq_along(tree$tip.label), which(nodeSig))
     nodesLooked[sigLeaves] = T
     candNode[sigLeaves] = T
-    #tested[tree$tip.label] = T
     if(cSign) signs <- computeSign(y, cond) else signs <- NULL
     #print(nonSigLeaves)
     for(n in nonSigLeaves) {
@@ -317,6 +320,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
             if(curNode==(length(tree$tip.label)+1))
                 break()
             p <- Ancestors(tree,curNode,"parent")
+            
             if(nodesLooked[p])
                 break()
             child <- unlist(Descendants(tree,p,"children"))
@@ -335,10 +339,11 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
             curNode <- p
         }
         #print(curNode)
-        negNode[curNode] <- T
+        if(!is.na(nodeSig[curNode]))
+            negNode[curNode] <- T
         nodesLooked[c(curNode,unlist(Descendants(tree,curNode,"all")))] <- T ## not want to set right descendants of parent if not a candidate
         
-        if(foundCand)
+        if(foundCand & !is.na(pvalue[curNode]))
         {
             if(pvalue[curNode] <= pCutOff)
             {
@@ -348,5 +353,6 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
         }
         #print(nodesLooked)
     }
+    nodesLooked[!mcols(y)[["keep"]]] <- F
     return(list("candNode" = candNode, "negNode" = negNode, "nodesLooked" = nodesLooked, "pCut" = pCutOff, "pChild" = pChild))
 }
