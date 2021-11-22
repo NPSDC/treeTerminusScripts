@@ -1,0 +1,102 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/simulate.rda")
+```
+
+#### Distribution of signs and levels
+```{r}
+minInfRV <- 0.20
+nLeaf <- length(tree$tip)
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+```{r}
+yAll <- labelKeep(yAll)
+set.seed(100)
+yAll <- swish(yAll, x="condition")
+print(system.time(tBefore <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = T, temp=T)))
+save(tBefore, file = "environment/brain_sim/final1_NA/tBefore.RData")
+
+# load("environment/brain_sim/final1_NA/tAfterNoStop.RData")
+# tAf <- list()
+# tAf[[1]] <- tAfterNoStop
+# for(i in c(2:7)) {
+#     set.seed(100*i)
+#     yAll <- swish(yAll, x="condition")
+#     tAf[[i]] <- runTreeTermAlphas(tree, yAll, "condition", -100000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)
+#     save(tAf, file = "environment/brain_sim/final1_NA/tAf.RData")
+# }
+```
+
+```{r}
+# missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+# sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+#                                                dimnames = list(missingTxps, colnames(sim.counts.mat))))
+# sim.counts.mat <- sim.counts.mat[rownames(y),]
+# length(missingTxps)
+# innNodes <- nrow(y)+1:tree$Nnode
+# aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+# logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+# dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+# dtus <- setdiff(dtus, dtus[which(abs(logFCNodes[dtus]) <= 0.01)])
+# rootFC <- abs(logFCNodes[nrow(y)+1])
+# print(mean(abs(logFCNodes[dtus]) > 0.023))
+```
+
+```{r}
+# detNodes <- list()
+# detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+# detNodes[["tAS1"]] <- lapply(tAf[[1]], function(ta) ta[["candNodeO"]])
+# detNodes[["tAS2"]] <- lapply(tAf[[2]], function(ta) ta[["candNodeO"]])
+# detNodes[["tAS3"]] <- lapply(tAf[[3]], function(ta) ta[["candNodeO"]])
+# detNodes[["tAS4"]] <- lapply(tAf[[4]], function(ta) ta[["candNodeO"]])
+# detNodes[["tAS5"]] <- lapply(tAf[[5]], function(ta) ta[["candNodeO"]])
+# ```
+# 
+# ```{r}
+# negNodes <- list()
+# negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+# negNodes[["tAS1"]] <- lapply(tAf[[1]], function(ta) c(ta[["negNodeO"]], setdiff(seq(nrow(y)), unlist(Descendants(tree, c(ta[["negNodeO"]], ta[["candNodeO"]]))))))
+# negNodes[["tAS2"]] <- lapply(tAf[[2]], function(ta) c(ta[["negNodeO"]], setdiff(seq(nrow(y)), unlist(Descendants(tree, c(ta[["negNodeO"]], ta[["candNodeO"]]))))))
+# negNodes[["tAS3"]] <- lapply(tAf[[3]], function(ta) c(ta[["negNodeO"]], setdiff(seq(nrow(y)), unlist(Descendants(tree, c(ta[["negNodeO"]], ta[["candNodeO"]]))))))
+# negNodes[["tAS4"]] <- lapply(tAf[[4]], function(ta) c(ta[["negNodeO"]], setdiff(seq(nrow(y)), unlist(Descendants(tree, c(ta[["negNodeO"]], ta[["candNodeO"]]))))))
+# negNodes[["tAS5"]] <- lapply(tAf[[5]], function(ta) c(ta[["negNodeO"]], setdiff(seq(nrow(y)), unlist(Descendants(tree, c(ta[["negNodeO"]], ta[["candNodeO"]]))))))
+# ```
+# 
+# ```{r}
+# df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+# for(n in names(detNodes))
+# {
+#     print(n)
+#     stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
+#     colnames(stats) <- colnames(df)[c(3:5)]
+#     stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+#     df <- rbind(df, stats)
+# }
+# print(df)
+```
