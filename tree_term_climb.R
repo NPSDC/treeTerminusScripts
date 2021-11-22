@@ -184,7 +184,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
 
 
 runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 0.05, corr = "IHW", runType = c("a"), alphas = c(0.01, 0.05, 0.1), 
-                              compPThresh = T, cSign = T, cores = 1, temp = T, file=NULL)
+                              compPThresh = T, cSign = T, cores = 1, temp = T, file=NULL, minP = 0.70)
 {
     library(qvalue)
     if(!corr %in% c("qvalue", "IHW", "BH"))
@@ -216,7 +216,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             j=i
             if(corr != "IHW")
                 j=1
-            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[j]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign, temp=temp)
+            runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[j]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign, temp=temp,minP=minP)
         }, mc.cores = cores)
         
         for(i in seq_along(alphas))
@@ -224,6 +224,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             sols[[i]][["candNodeO"]] <- which(nSol[[i]][["candNode"]])
             sols[[i]][["negNode"]] <- nSol[[i]][["negNode"]]
             sols[[i]][["negNodeO"]] <- which(nSol[[i]][["negNode"]])
+            sols[[i]][["naNodeO"]] <- which(nSol[[i]][["naNode"]])
         }
     }
     else
@@ -235,7 +236,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             else
                 pThresh <- pCutOff
             print(pThresh)
-            runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign, temp=temp)
+            runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign, temp=temp,minP=minP)
         }, mc.cores = cores)
         if(!is.null(file))
             save(nSol, file = file)
@@ -273,6 +274,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             sols[[i]][["negNode"]] <- nSol[[i]][["negNode"]]
             sols[[i]][["negNode"]][remNegNodes] <- T
             sols[[i]][["negNodeO"]] <- which(sols[[i]][["negNode"]])
+            sols[[i]][["naNodeO"]] <- which(nSol[[i]][["naNode"]])
         }
         # nSol <- list(nSol)
     }
@@ -294,7 +296,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
     return(sols)
 }
 
-runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T, temp=T)
+runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pChild = 0.05, cSign = T, temp=T,minP=0.70)
 {
     nodeSig <- rep(T, nrow(y)) ### node significant or not
     nodeSig[pvalue > pChild] = F
@@ -303,12 +305,13 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
     candNode <- rep(F, nrow(y)) ### Nodes that would be the output
     nodesLooked <- rep(F, nrow(y)) ### Nodes that we have already gone over and wont be going over any further
     negNode <- rep(F, nrow(y)) ### Nodes that are output as negative
+    naNode <- rep(F, nrow(y)) ### Nodes that are output as NA
     nonSigLeaves <- intersect(seq_along(tree$tip.label), union(which(!nodeSig), which(is.na(nodeSig)))) ### we want to aggregate leaves with NA pvalues as well
     print(length(nonSigLeaves))
     sigLeaves <- intersect(seq_along(tree$tip.label), which(nodeSig))
     nodesLooked[sigLeaves] = T
     candNode[sigLeaves] = T
-    if(cSign) signs <- computeSign(y, cond) else signs <- NULL
+    if(cSign) signs <- computeSign(y, cond, minP = minP) else signs <- NULL
     #print(nonSigLeaves)
     for(n in nonSigLeaves) {
         if(nodesLooked[n])
@@ -339,20 +342,22 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
             curNode <- p
         }
         #print(curNode)
-        if(!is.na(nodeSig[curNode]))
+        if(is.na(pvalue[curNode]))
+            naNode[curNode] <- T
+        else {
             negNode[curNode] <- T
-        nodesLooked[c(curNode,unlist(Descendants(tree,curNode,"all")))] <- T ## not want to set right descendants of parent if not a candidate
-        
-        if(foundCand & !is.na(pvalue[curNode]))
-        {
-            if(pvalue[curNode] <= pCutOff)
+            nodesLooked[c(curNode,unlist(Descendants(tree,curNode,"all")))] <- T ## not want to set right descendants of parent if not a candidate
+            
+            if(foundCand)
             {
-                candNode[curNode] <- T
-                negNode[curNode] <- F
+                if(pvalue[curNode] <= pCutOff)
+                {
+                    candNode[curNode] <- T
+                    negNode[curNode] <- F
+                }
             }
         }
-        #print(nodesLooked)
     }
     nodesLooked[!mcols(y)[["keep"]]] <- F
-    return(list("candNode" = candNode, "negNode" = negNode, "nodesLooked" = nodesLooked, "pCut" = pCutOff, "pChild" = pChild))
+    return(list("candNode" = candNode, "negNode" = negNode, "naNode" = naNode, "nodesLooked" = nodesLooked, "pCut" = pCutOff, "pChild" = pChild))
 }

@@ -15,7 +15,10 @@ suppressPackageStartupMessages(library(treeclimbR))
 suppressPackageStartupMessages(library(SummarizedExperiment))
 load("environment/brain_sim/yAll.RData")
 load("environment/brain_sim/tree.RData")
-
+yAll <- labelKeep(yAll)
+yAll <- swish(yAll, x="condition")
+mcols(yAll)[["pvalue"]][!mcols(yAll)[["keep"]]] <- runif(sum(!mcols(yAll)[["keep"]]),0,1)
+mcols(yAll)[["qvalue"]][!mcols(yAll)[["keep"]]] <- 1
 swishRes <- data.frame(mcols(yAll))
 swishRes$node <- seq(1:nrow(yAll))
 swishRes <- swishRes[,-c(2)] ### Removing keep

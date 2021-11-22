@@ -639,9 +639,12 @@ getGeneCombPvalue <- function(geneGroups, y, method = c("harmonic"), correct = c
       stop("incorrect correction enter")  
   }
   L <- length(unlist(geneGroups))
-  print(L)
+  print(length(geneGroups))
   pvalues <- sapply(geneGroups, function(g) {
     pvals <- mcols(y)[g,"pvalue"]
+    if(sum(is.na(pvals)) == length(pvals))
+      return(NA)
+    pvals <- pvals[!is.na(pvals)]
     if(method=="harmonic") {
       if(is.null(correct))
         p.hmp(pvals, L=L)
@@ -657,11 +660,13 @@ getGeneCombPvalue <- function(geneGroups, y, method = c("harmonic"), correct = c
     }
       
   })
+  pvalues <- pvalues[!is.na(pvalues)]
+  print(length(pvalues))
   if(!is.null(correct)) {
     if(correct=="BH")
       pvalues <- p.adjust(pvalues, method = "BH")
     else
-      pvalues <- qvalue(pvalue)[["qvalues"]]
+      pvalues <- qvalue(pvalues)[["qvalues"]]
   }
    return(pvalues) 
 }
