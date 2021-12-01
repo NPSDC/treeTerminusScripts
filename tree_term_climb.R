@@ -234,7 +234,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
             if(compPThresh)
                 pThresh <- estimatePThresh(y[1:length(tree$tip),], alpha)
             else
-                pThresh <- pCutOff
+                pThresh <- alpha
             print(pThresh)
             runTreeTermAlpha(tree, y, cond, minInfRV, mcols(y)[["pvalue"]], pCutOff = pThresh, pChild = pThresh, cSign = cSign, temp=temp,minP=minP)
         }, mc.cores = cores)
@@ -342,8 +342,10 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
             curNode <- p
         }
         #print(curNode)
-        if(is.na(pvalue[curNode]))
+        if(is.na(pvalue[curNode])) {
             naNode[curNode] <- T
+            naNode[unlist(Descendants(tree, curNode, "all"))] <- F
+        }
         else {
             negNode[curNode] <- T
             nodesLooked[c(curNode,unlist(Descendants(tree,curNode,"all")))] <- T ## not want to set right descendants of parent if not a candidate
@@ -359,5 +361,6 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
         }
     }
     nodesLooked[!mcols(y)[["keep"]]] <- F
+    naNode[unlist(Descendants(tree, sort(c(which(candNode), which(negNode))), "all"))] <- F
     return(list("candNode" = candNode, "negNode" = negNode, "naNode" = naNode, "nodesLooked" = nodesLooked, "pCut" = pCutOff, "pChild" = pChild))
 }
