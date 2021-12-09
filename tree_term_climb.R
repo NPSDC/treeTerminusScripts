@@ -306,6 +306,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
     nodesLooked <- rep(F, nrow(y)) ### Nodes that we have already gone over and wont be going over any further
     negNode <- rep(F, nrow(y)) ### Nodes that are output as negative
     naNode <- rep(F, nrow(y)) ### Nodes that are output as NA
+    naLooked <- rep(F, nrow(y)) ### Nodes that are looked are output as NA
     nonSigLeaves <- intersect(seq_along(tree$tip.label), union(which(!nodeSig), which(is.na(nodeSig)))) ### we want to aggregate leaves with NA pvalues as well
     print(length(nonSigLeaves))
     sigLeaves <- intersect(seq_along(tree$tip.label), which(nodeSig))
@@ -343,8 +344,13 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
         }
         #print(curNode)
         if(is.na(pvalue[curNode])) {
-            naNode[curNode] <- T
-            naNode[unlist(Descendants(tree, curNode, "all"))] <- F
+            if(!naLooked[curNode]) 
+            {
+                naNode[curNode] <- T
+                naLooked[c(curNode,unlist(Descendants(tree, curNode, "all")))] <- T
+            }
+            if(curNode > length(tree$tip))
+                naNode[unlist(Descendants(tree, curNode, "all"))] <- F
         }
         else {
             negNode[curNode] <- T

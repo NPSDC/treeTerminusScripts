@@ -680,3 +680,49 @@ fixDf <- function(df) {
   df_metrics$level <- sub("FDR_","",df_gather$FDR[2 * 1:nrow(df_metrics)])
   return(df_metrics)
 }
+
+### root of the mean (over features) of squared differences across the mean (over samples) log2 abundance per condition
+computeDeseqInf <- function(y, tNodes) {
+  tpm <- assays(y)[["abundance"]]
+  sf <- DESeq2::estimateSizeFactorsForMatrix(tpm)
+  logScaledTpm <- log2(t(t(tpm)/sf)+1)
+  mC1 <- rowMeans(logScaledTpm[,colData(y)[["condition"]]==1]) ##mean condition 1
+  mC2 <- rowMeans(logScaledTpm[,colData(y)[["condition"]]==2]) ##mean condition 2
+  diff <- (mC2 - mC1)^2
+  if(class(tNodes) == "list")
+    tNodes <- c(tNodes[["candNodeO"]], tNodes[["negNodeO"]], tNodes[["naNodeO"]])
+  return(sqrt(mean(diff[tNodes])))
+}
+
+### root of the sum (over features) of weighted squared log2 fold change of fishpond-scaled counts, weighting by the InfVar(LFC)
+computeWeightedLFC <- function(y, tNodes, type = "sum") {
+  compLFC <- function(reps, conds) {
+    mC1 <- rowMeans(reps[,conds==1]) ##mean condition 1
+    mC2 <- rowMeans(reps[,conds==2]) ##mean condition 2
+    lfc <- log2(mC2+1) - log2(mC1+1)
+    return(lfc)
+  }
+  if(class(y) == 'list') {
+    lfcCounts <- y[[1]]
+    varThresh <- y[[2]]
+    lfcVar <- y[[3]]  
+    lfcVar[lfcVar < varThresh] = varThresh[lfcVar < varThresh] ## setting threshold for the feature to expected variance  
+    if(class(tNodes) == "list")
+      nodes <- c(tNodes[["candNodeO"]], tNodes[["negNodeO"]], tNodes[["naNodeO"]])
+    else
+      nodes <- tNodes
+    if(type == "mean")
+      return(sqrt(mean(lfcCounts[nodes]^2/lfcVar[nodes])))
+    return(sqrt(sum(lfcCounts[nodes]^2/lfcVar[nodes])))
+  }  
+  lfcCounts <- compLFC(assays(y)[["counts"]], colData(y)[["condition"]]) ## count LFC
+  varThresh <- log2(exp(1))^2*(1/(rowMeans(assays(y)[["counts"]][,colData(y)[["condition"]]==1])+1) + 1/(rowMeans(assays(y)[["counts"]][,colData(y)[["condition"]]==2])+1)) ## threshold for variance
+  
+  lfcReps <- sapply(assayNames(y)[grepl("infRep", assayNames(y))], function(rep) compLFC(assays(y)[[rep]], colData(y)[["condition"]])) ## lfc for inf replicates
+  lfcVar <- rowVars(lfcReps) ## variance over LFC inferential replicates
+  print(sum(lfcVar < varThresh))
+  
+  if(is.null(tNodes)) {
+    return(list(lfcCounts, varThresh, lfcVar))
+  }
+}
