@@ -1,0 +1,98 @@
+---
+title: "Analyzing trees"
+author: "Noor Pratap Singh"
+date: "12/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+```{r}
+load("environment/fastrfs/inpNotRemUnroot.RData")
+load("environment/fastrfs/dfStelar.RData")
+load("environment/fastrfs/phylipCons.RData")
+load("environment/fastrfs/inpPhylTreesUnroot.RData")
+
+gL <- sapply(strsplit(rownames(inpNotRemTreesUnroot), split="_", fixed = T),length) ### Group lengths
+readTrees <- function(treeStrings, type="u") {
+    frfsTrees <- lapply(treeStrings, function(x) {
+        t <- read.tree(text=x)
+        if(length(t$tip)>2)
+            unroot(t)
+        else
+            t
+        })
+    if(type=="r")
+        frfsTrees <- lapply(treeStrings, function(x) read.tree(text=x))
+    return(frfsTrees)
+}
+trL <- list(frfsNRem = readTrees(inpNotRemTreesUnroot[["rootedFRFS_infRV"]], type="r"), Cons = read.tree("../brain_sim/out_term/cluster_nwk.txt"), frfsConcInp = readTrees(inpPhylTrees[["rootedFRFS_infRV"]], type="r"), stel = readTrees(dfStelar[["stelTrees"]], type="r"))
+```
+
+#### Comparing inferential uncertainty
+```{r}
+redInfRV <- list(frfsNRem = inpNotRemTreesUnroot[["redInfRV_FRFS"]], Cons = phylipCons[["infRedPhyl"]], frfsConcInp = inpPhylTreesUnroot[["redInfRV_FRFS"]], stel = dfStelar[["redInFRV"]])
+redInfRV <- lapply(redInfRV, as.numeric)
+stelInds <- match(rownames(dfStelar), rownames(inpPhylTrees))
+
+### Net reduction in infRV
+print(sapply(redInfRV, sum))
+print(sapply(names(redInfRV), function(x) {
+        if(x=="stel")
+            sum(redInfRV[[x]])
+        else
+            sum(redInfRV[[x]][stelInds])
+    }))
+
+### NTrees in which net reduction is negative
+print(sapply(redInfRV, function(red) sum(red < 0)))
+print(sapply(names(redInfRV), function(x) {
+        if(x=="stel")
+            sum(redInfRV[[x]] < 0)
+        else
+            sum(redInfRV[[x]][stelInds] < 0)
+    }))
+
+
+print(sapply(redInfRV, summary))
+
+### Comparing frfs with phylip
+diff <- abs(redInfRV[[2]] - redInfRV[[1]])
+smF <- which(redInfRV[[2]] - redInfRV[[1]] > 1e-2) ### frfs on reduced is smaller
+smP <- which(redInfRV[[1]] - redInfRV[[2]] > 1e-2)
+
+dfInfDiff <- data.frame(diff = diff[c(smF, smP)], type = c(rep("FRFS", length(smF)), rep("Phylip", length(smP))))
+ggplot(dfInfDiff, aes(x=type, y=log10(diff))) + geom_violin()
+
+print(max(diff[smF]))
+print(max(diff[smP]))
+
+gL[smF[order(diff[smF],decreasing=T)][1:10]]  ##11016, 12104(109669, only in 10)
+ind <- 12104
+cophyloplot(trL[[1]][[ind]], trL[[2]][[ind]])
+```
+
+#### RF distance
+```{r}
+RFDist <- list(frfsNRem = inpNotRemTreesUnroot[["RF_FRFS"]], Cons = phylipCons[["RFDist_Not_Rem"]], frfsConcInp = inpPhylTreesUnroot[["RF_Phyl_Inp"]], stel = dfStelar[["RF_Phyl_Inp"]], frfsPhyl = inpNotRemTreesUnroot[["RF_Phyl_Inp"]], Cons_Phyl = phylipCons[["RFDist_Phyl"]])
+print(sapply(RFDist, sum))
+print(sapply(names(RFDist), function(x) {
+        if(x=="stel")
+            sum(RFDist[[x]])
+        else
+            sum(RFDist[[x]][stelInds])
+    }))
+print(sapply(RFDist, summary))
+
+Distdiff <- abs(RFDist[[2]] - RFDist[[1]])
+smFD <- which(RFDist[[2]] > RFDist[[1]]) ### frfs on reduced is smaller
+smPD <- which(RFDist[[1]] > RFDist[[2]])
+
+dfRFDiff <- data.frame(diff = Distdiff[c(smFD, smPD)], type = c(rep("FRFS", length(smFD)), rep("Phylip", length(smPD))))
+ggplot(dfInfDiff, aes(x=type, y=log10(diff))) + geom_violin()
+
+```

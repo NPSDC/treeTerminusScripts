@@ -1,0 +1,70 @@
+---
+title: "getPhylipScore"
+author: "Noor Pratap Singh"
+date: "12/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/mapDf.RData")
+load("environment/fastrfs/phylipCons.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("fastrfs/root_tree.R"))
+```
+
+```{r}
+phylConsTrees <- read.tree("../brain_sim/out_term/cluster_nwk.txt")
+# majConsFRfs <- read.delim("../brain_sim/concat_op/majority_trees.nwk", header = F, sep = "\t")
+# phylipCons <- data.frame(gName = majConsFRfs[,1], infRedPhyl = rep(0.1, length(phylipCons)))
+phylInpTreesFile <- "../brain_sim/out_term/trees_phyl_inp.nwk"
+treesInpPhyl <- readInpTrees(phylInpTreesFile)
+```
+
+```{r}
+phylipCons[["RFDist_Phyl"]] <- unlist(mclapply(seq(treesInpPhyl), function(i) {
+    t1 <- phylConsTrees[[i]]
+    print(t1)
+    sum(unlist(mclapply(treesInpPhyl[[i]], function(t2) computeRF(t1, t2, rooted = T, norm = F),mc.cores=8)))
+}))
+```
+
+```{r}
+# i=0
+# range <- 1000
+# while(i < length(phylConsTrees)) {
+#     print(i)
+#     phylipCons[i+1:range,"infRedPhyl"] <- unlist(mclapply(phylConsTrees[i+1:range], function(tree) getRedInfRV(tree, y, mapDf, cores=8), mc.cores=12))
+#     if(i+range > length(phylipConsTrees)) {
+#         range <- length(phylConsTrees) - i
+#     }
+#     
+#     i <- i+range
+#     save(phylipCons, file = "environment/fastrfs/phylipCons.RData")
+# }
+```
+
+```{r}
+# load("environment/fastrfs/treesInpNotRem.RData")
+# 
+# phylipCons[["RFDist_Not_Rem"]] <- unlist(mclapply(seq(treesInpNotRem), function(i) {
+#     t1 <- phylConsTrees[[i]]
+#     print(t1)
+#     sum(unlist(mclapply(treesInpNotRem[[i]], function(t2) computeRF(t1, t2, rooted = T, norm = F),mc.cores=8)))
+# }))
+```
+
+```{r}
+# load("environment/fastrfs/treesInpRem.RData")
+# phylipCons[["RFDist_Rem"]] <- unlist(mclapply(seq(treesInpRem), function(i) {
+#     t1 <- phylConsTrees[[i]]
+#     print(t1)
+#     sum(unlist(mclapply(treesInpRem[[i]], function(t2) computeRF(t1, t2, rooted = T, norm = F),mc.cores=8)))
+# }))
+save(phylipCons, file="environment/fastrfs/phylipCons.RData")
+```

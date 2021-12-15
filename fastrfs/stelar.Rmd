@@ -1,0 +1,68 @@
+---
+title: "Stelar"
+author: "Noor Pratap Singh"
+date: "12/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/mapDf.RData")
+load("environment/fastrfs/inpNotRem.RData")
+load("environment/fastrfs/treesInpPhyl.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("fastrfs/root_tree.R"))
+```
+
+```{r}
+stelFile <- "../brain_sim/out_term/cons_stelar_nwk.txt"
+stelTrees <- read.tree(stelFile)
+
+# i=0
+# stelRedInfRV <- rep(0, length(stelTrees))
+# range <- 1000
+# while(i < length(stelTrees)) {
+#     print(i)
+#     stelRedInfRV[i+1:range] <- unlist(mclapply(stelTrees[i+1:range], function(tree) getRedInfRV(tree, y, mapDf, cores=8), mc.cores=4))
+#     if(i+range > length(stelTrees)) {
+#         range <- length(stelTrees) - i
+#     }
+# 
+#     i <- i+range
+#     save(stelRedInfRV, file = "environment/fastrfs/stelCons.RData")
+# }
+```
+
+```{r}
+groups <- rownames(inpNotRemTrees)
+groupTxps <- lapply(strsplit(groups, split = "_", fixed = T), as.numeric)
+
+minGroups <- sapply(groupTxps, function(txps) min(txps))
+minStel <- sapply(stelTrees, function(tree) min(as.numeric(tree$tip)))
+iGs <- intersect(minGroups, minStel)
+dfStelar <- data.frame(stelTrees=rep("a", length(iGs)))
+gInds <- match(iGs, minGroups)
+rownames(dfStelar) <- groups[gInds]
+# 
+stelDf <- read.delim(stelFile, header = F)
+stelInds <- match(iGs, minStel)
+# dfStelar[["stelTrees"]] <- stelDf[stelInds, "V1"]
+# dfStelar[["stelTrees"]] <- gsub(";",":0;",dfStelar[["stelTrees"]])
+# dfStelar[["redInFRV"]] <- stelRedInfRV[stelInds]
+# save(dfStelar, file="environment/fastrfs/dfStelar.RData")
+```
+
+```{r}
+load("environment/fastrfs/dfStelar.RData")
+dfStelar[["RF_Phyl_Inp"]] <- rep(1, length(gInds))
+for(i in seq_along(gInds)) {
+    t1 <- read.tree(text=inpNotRemTrees[gInds[i], "rootedFRFS_infRV"])
+    dfStelar[i,"RF_Phyl_Inp"] <- sum(unlist(mclapply(treesInpPhyl[[gInds[i]]], function(t2) computeRF(t1, t2, rooted = T, norm = F),mc.cores=8)))
+}
+save(dfStelar, file="environment/fastrfs/dfStelar.RData")
+```

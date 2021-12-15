@@ -1,0 +1,83 @@
+---
+title: "Root FastRFS"
+author: "Noor Pratap Singh"
+date: "12/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/mapDf.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("fastrfs/root_tree.R"))
+```
+
+```{r}
+# inpRemTrees <- read.delim("../brain_sim/trees_rem_fastrfs/majority_trees.nwk", header = F, sep = "\t", row.names = 1)
+# rownames(inpRemTrees) <- sapply(strsplit(rownames(inpRemTrees), split=" ", fixed=T), function(x) x[[2]])
+# colnames(inpRemTrees) <- c("unrooted_tree")
+# inpRemTrees <- cbind(inpRemTrees, rootedFRFS_infRV = rep("T", nrow(inpRemTrees))) ### Tree given by rooting fastrfs based on infRV
+# inpRemTrees <- cbind(inpRemTrees, redInfRV_FRFS = rep(1, nrow(inpRemTrees))) ### Reduction in infRV for a best rooted tree of fastrfs
+
+
+# frfsTrees <- sapply(inpRemTrees$unrooted_tree, function(x) {
+#     read.tree(text=x)
+#     })
+# scoreFrfsRem <- vector(mode = "list", length(frfsTrees))
+```
+
+### Finding the rooted tree and computing the reduction in infRV
+```{r}
+# i=0
+# range <- 1000
+# while(i < length(scoreFrfsRem)) {
+#     print(i)
+#     if(i+range > length(scoreFrfsRem))
+#         range <- length(scoreFrfsRem) - i
+#     scoreFrfsRem[i+1:range] <- mclapply(frfsTrees[i+1:range], function(tree) {
+#         if(is.null(tree))
+#             return(list(tree="", infRVRed=0))
+#         findBestTree(tree, y, mapDf, type = "infRV", cores=8)
+#         }, mc.cores=12)
+#     
+#     i <- i+range
+#     save(scoreFrfsRem, file = "environment/fastrfs/scoreFrfsRem.RData")
+# }
+```
+
+#### Computing RF distance
+```{r}
+# load("environment/fastrfs/scoreFrfsRem.RData")
+# inpRemTrees[["rootedFRFS_infRV"]] <- sapply(scoreFrfsRem, function(x) x[[1]])
+# inpRemTrees[["redInfRV_FRFS"]] <- sapply(scoreFrfsRem, function(x) min(x[[2]]))
+# inpRemTrees[["RF_FRFS"]] <- rep(1, nrow(inpRemTrees)) ### Net sum of RF between FRFS rooted and input
+# save(inpRemTrees, file = "environment/fastrfs/inpRemTrees.RData")
+load("environment/fastrfs/inpRemTrees.RData")
+load("environment/fastrfs/vals.RData")
+
+treeInpFile <- "../brain_sim/out_term/trees_rem.nwk"
+# treesInpRem <- readInpTrees(treeInpFile)
+# save(treesInpRem, file="environment/fastrfs/treesInpRem.RData")
+load("environment/fastrfs/treesInpRem.RData")
+
+for(i in seq_along(treesInpRem)) {
+    t1 <- read.tree(text=inpRemTrees[i, "rootedFRFS_infRV"])
+    inpRemTrees[i,"RF_FRFS"] <- ifelse(is.null(t1) | vals[i], 0, sum(unlist(mclapply(treesInpRem[[i]], function(t2) computeRF(t1, t2, rooted = T, norm = F),mc.cores=8))))
+}
+save(inpRemTrees, file="environment/fastrfs/inpRemTrees.RData")
+```
+
+```{r}
+#bInds <-  which(inpRemTrees[,1]=="")
+# vals <- rep(F, length(treesInpRem))
+# for(i in seq_along(treesInpRem[1:40])) {
+#     t1 <- read.tree(text=inpRemTrees[i, "rootedFRFS_infRV"])
+#     vals[i] <- ifelse(is.null(t1), FALSE, sum(unlist(mclapply(treesInpRem[[i]], function(t2) sum(!(t2$tip %in% t1$tip)) > 0, mc.cores=8))) > 0)
+# }
+# save(vals, file="environment/fastrfs/vals.RData")
+```

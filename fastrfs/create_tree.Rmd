@@ -1,0 +1,46 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/mapDf.RData")
+load("environment/fastrfs/inpNotRemUnroot.RData")
+load("environment/brain_sim/seBrainSim.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("fastrfs/root_tree.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+```
+
+```{r}
+# trees <- lapply(inpNotRemTreesUnroot[,2], function(tr) read.tree(text=tr))
+# tree <- mergeTree(trees, se = seBrainSim)
+# 
+# modOb <- mergeLeaves(tree, y)
+# tree <- modOb[["tree"]]
+# y <- modOb[["ySwish"]]
+# save(tree, file="environment/fastrfs/tree.RData")
+# 
+# yAll <- prepSwish(tree, y)
+# yAll <- scaleInfReps(yAll, lengthCorrect = T)
+# yAll <- labelKeep(yAll)
+# set.seed(100)
+# yAll <- swish(yAll, x="condition")
+# yAll <- computeInfRV(yAll)
+# save(yAll, file="environment/fastrfs/yAll.RData")
+```
+
+```{r}
+load("environment/fastrfs/yAll.RData")
+load("environment/fastrfs/tree.RData")
+# print(system.time(tAfterNoStop <- runTreeTermAlphas(tree, yAll, "condition", -10000, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+# save(tAfterNoStop, file = "environment/fastrfs/tAfterNoStop.RData")
+print(system.time(tAfter <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = T, temp=T)))
+save(tAfter, file = "environment/fastrfs/tAfter.RData")
+```
