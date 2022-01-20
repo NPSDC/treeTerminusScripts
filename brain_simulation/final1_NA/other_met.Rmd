@@ -1,0 +1,164 @@
+---
+title: "other_met"
+author: "Noor Pratap Singh"
+date: "12/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading data
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/final1_NA/tAfter.RData")
+load("environment/brain_sim/final1_NA/tAfterNoStop.RData")
+load("environment/brain_sim/final1_NA/tAfterNoSign.RData")
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/simulate.rda")
+```
+
+#### TFC
+```{r}
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+dtus <- setdiff(dtus, dtus[which(abs(logFCNodes[dtus]) <= 0.01)])
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+```
+
+#### Taking leaves as events
+```{r}
+diffNodes <- which(abs(logFCNodes) >= rootFC)
+candAfter <- sapply(tAfter, function(tA) Descendants(tree, tA[["candNodeO"]]))
+candAfterNoSign <- sapply(tAfterNoSign, function(tA) Descendants(tree, tA[["candNodeO"]]))
+candAfterNoStop <- sapply(tAfterNoStop, function(tA) Descendants(tree, tA[["candNodeO"]]))
+
+avEvents <- list()
+avEvents[["After"]] <- sapply(candAfter, function(desc) mean(sapply(desc, function(d) sum(d %in% diffNodes))))
+avEvents[["AfterNoSign"]] <- sapply(candAfterNoSign, function(desc) mean(sapply(desc, function(d) sum(d %in% diffNodes))))
+avEvents[["AfterNoStop"]] <- sapply(candAfterNoStop, function(desc) mean(sapply(desc, function(d) sum(d %in% diffNodes)))) 
+print(avEvents)
+
+avEventsNFP <- list()
+avEventsNFP[["After"]] <- sapply(candAfter, function(desc) {
+    sums <- sapply(desc, function(d) {
+        sum(d %in% diffNodes)
+    })
+    sums <- sums[sums!=0]
+    mean(sums)
+  })
+avEventsNFP[["AfterNoStop"]] <- sapply(candAfterNoStop, function(desc) {
+    sums <- sapply(desc, function(d) {
+        sum(d %in% diffNodes)
+    })
+    sums <- sums[sums!=0]
+    mean(sums)
+  })
+avEventsNFP[["AfterNoSign"]] <- sapply(candAfterNoSign, function(desc) {
+    sums <- sapply(desc, function(d) {
+        sum(d %in% diffNodes)
+    })
+    sums <- sums[sums!=0]
+    mean(sums)
+  })
+print(avEventsNFP)
+```
+
+#### Taking all descendants as events
+```{r}
+candAfter <- sapply(tAfter, function(tA) Descendants(tree, tA[["candNodeO"]], "all"))
+candAfterNoSign <- sapply(tAfterNoSign, function(tA) Descendants(tree, tA[["candNodeO"]], "all"))
+candAfterNoStop <- sapply(tAfterNoStop, function(tA) Descendants(tree, tA[["candNodeO"]], "all"))
+avEventsAllDesc <- list()
+avEventsAllDesc[["After"]] <- sapply(candAfter, function(desc) mean(sapply(desc, function(d) sum(d %in% diffNodes))))
+avEventsAllDesc[["AfterNoSign"]] <- sapply(candAfterNoSign, function(desc) mean(sapply(desc, function(d) sum(d %in% diffNodes))))
+avEventsAllDesc[["AfterNoStop"]] <- sapply(candAfterNoStop, function(desc) mean(sapply(desc, function(d) sum(d %in% diffNodes)))) 
+print(avEventsAllDesc)
+
+avEventsAllDescNFP <- list()
+avEventsAllDescNFP[["After"]] <- sapply(candAfter, function(desc) {
+    sums <- sapply(desc, function(d) {
+        sum(d %in% diffNodes)
+    })
+    sums <- sums[sums!=0]
+    mean(sums)
+  })
+avEventsAllDescNFP[["AfterNoStop"]] <- sapply(candAfterNoStop, function(desc) {
+    sums <- sapply(desc, function(d) {
+        sum(d %in% diffNodes)
+    })
+    sums <- sums[sums!=0]
+    mean(sums)
+  })
+avEventsAllDescNFP[["AfterNoSign"]] <- sapply(candAfterNoSign, function(desc) {
+    sums <- sapply(desc, function(d) {
+        sum(d %in% diffNodes)
+    })
+    sums <- sums[sums!=0]
+    mean(sums)
+  })
+print(avEventsAllDesc)
+```
+
+#### LFC
+```{r}
+lf <- computeWeightedLFC(yAll,NULL)
+rootInd  = length(tree$tip)+1
+mets <- data.frame(f_0.01 = c(), f_0.05 = c(), f_0.10 = c())
+mets <- rbind(mets, sapply(tAfter, function(x) computeWeightedLFC(lf,x)))
+mets <- rbind(mets,sapply(tAfter, function(x) { 
+        nodes <- c(x[["candNodeO"]], x[["negNodeO"]], x[["naNodeO"]])
+        ancNodes <- Ancestors(tree, nodes, "parent")
+        print(paste(sum(ancNodes==rootInd), length(ancNodes)))
+        ancNodes[ancNodes==rootInd] = nodes[ancNodes==rootInd]
+        computeWeightedLFC(lf,ancNodes)
+      }))
+mets <- rbind(mets, sapply(tAfterNoStop, function(x) computeWeightedLFC(lf,x)))
+mets <- rbind(mets,sapply(tAfterNoStop, function(x) { 
+        nodes <- c(x[["candNodeO"]], x[["negNodeO"]], x[["naNodeO"]])
+        ancNodes <- Ancestors(tree, nodes, "parent")
+        print(paste(sum(ancNodes==rootInd), length(ancNodes)))
+        ancNodes[ancNodes==rootInd] = nodes[ancNodes==rootInd]
+        computeWeightedLFC(lf,ancNodes)
+      }))
+metaGene <- computeWeightedLFC(lf, unlist(Descendants(tree, rootInd)))
+rownames(mets) <- c("tAfter", "tAfterAnc", "tAfterNoStop", "tAfterNoStopAnc")
+colnames(mets) <- c(0.01,0.05,0.1)
+print(mets)
+print(metaGene)
+```
+
+#### RMSDiff
+```{r}
+rmsMet <- data.frame(f_0.01 = c(), f_0.05 = c(), f_0.10 = c())
+rmsMet <- rbind(rmsMet, sapply(tAfter, function(x) computeDeseqInf(yAll,x)))
+rmsMet <- rbind(rmsMet,sapply(tAfter, function(x) { 
+        nodes <- c(x[["candNodeO"]], x[["negNodeO"]], x[["naNodeO"]])
+        ancNodes <- Ancestors(tree, nodes, "parent")
+        print(paste(sum(ancNodes==rootInd), length(ancNodes)))
+        ancNodes[ancNodes==rootInd] = nodes[ancNodes==rootInd]
+        computeDeseqInf(yAll, ancNodes)
+      }))
+rmsMet <- rbind(rmsMet, sapply(tAfterNoStop, function(x) computeDeseqInf(yAll,x)))
+rmsMet <- rbind(rmsMet,sapply(tAfterNoStop, function(x) { 
+        nodes <- c(x[["candNodeO"]], x[["negNodeO"]], x[["naNodeO"]])
+        ancNodes <- Ancestors(tree, nodes, "parent")
+        print(paste(sum(ancNodes==rootInd), length(ancNodes)))
+        ancNodes[ancNodes==rootInd] = nodes[ancNodes==rootInd]
+        computeDeseqInf(yAll, ancNodes)
+      }))
+rownames(rmsMet) <- c("tAfter", "tAfterAnc", "tAfterNoStop", "tAfterNoStopAnc")
+colnames(rmsMet) <- c(0.01,0.05,0.1)
+print(rmsMet)
+print(computeDeseqInf(yAll, unlist(Descendants(tree, rootInd, "children"))))
+```

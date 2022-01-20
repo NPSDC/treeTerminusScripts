@@ -17,12 +17,15 @@ suppressPackageStartupMessages(source("tree_helper_function.R"))
 # load("environment/brain_sim/final1_NA/tAfter.RData")
 # load("environment/brain_sim/tree.RData")
 # load("environment/brain_sim/mapDf.RData")
-# load("environment/brain_sim/yAll.RData")
-# load("environment/brain_sim/y.RData")
-load("environment/brain_sim/simulate.rda")
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+# load("environment/brain_sim/simulate.rda")
 load("environment/brain_sim/final1_NA/gene_group/combPvalsqvalNoStop.Rdata")
 load("environment/brain_sim/final1_NA/gene_group/combPvalsqval.Rdata")
 load("environment/brain_sim/final1_NA/gene_group/combPvalstxp.Rdata")
+load("environment/brain_sim/gene_group/txpGeneGroup.Rdata")
+load("environment/brain_sim/final1_NA/gene_group/qvalGeneGroup.Rdata")
+load("environment/brain_sim/final1_NA/gene_group/qvalNoStopGeneGroup.Rdata")
 ```
 
 ### Computing gene groups
@@ -151,77 +154,134 @@ for(i in seq_along(combPvalsqvalNoStop)[c(1,2)])
     dfGeneMet <- rbind(dfGeneMet, stats)
 }
 print(dfGeneMet)
-save(dfGeneMet, file = "environment/brain_sim/final1_NA/gene_group/dfGeneMet.Rdata")
-
-df_fix <- fixDf(dfGeneMet)
-ggplot(df_fix, aes(FDR, TPR, color=Method)) + geom_point() + geom_line()
+# save(dfGeneMet, file = "environment/brain_sim/final1_NA/gene_group/dfGeneMet.Rdata")
+# 
+# df_fix <- fixDf(dfGeneMet)
+# ggplot(df_fix, aes(FDR, TPR, color=Method)) + geom_point() + geom_line()
 ```
 
 
 ```{r}
-trueDTUTxp <- intersect(dtu.genes, names(combPvalstxp[[2]]))
-trueDTUNS <- intersect(dtu.genes, names(combPvalsqvalNoStop[[2]][[3]]))
-commDTUs <- intersect(trueDTUNS, trueDTUTxp) ###True DTUs
-
-genesOnlyTxp <- intersect(commDTUs,names(combPvalstxp[[2]])[which(combPvalstxp[[2]] <= 0.1)])
-genesOnlyNoStop <- intersect(commDTUs,names(combPvalsqvalNoStop[[2]][[3]])[which(combPvalsqvalNoStop[[2]][[3]] <= 0.1)])
-
-qvalMissing <- setdiff(genesOnlyTxp, genesOnlyNoStop)
-nostopMissing <- setdiff(genesOnlyNoStop, genesOnlyTxp)
-#
-print(sum(setdiff(txpMissing, qvalMissing) %in% genes[which(combPvalsqvalNoStop[[3]][[3]] <= 0.1)]))
-combPvalsqvalNoStop[[2]][[3]][qvalMissing]
-
-df <- data.frame(txp=rep(1,length(qvalMissing)), qval=rep(1,length(qvalMissing)))
-rownames(df) <- qvalMissing
-df[qvalMissing,1] <- combPvalstxp[[2]][qvalMissing]
-df[qvalMissing,2] <- combPvalsqvalNoStop[[2]][[3]][qvalMissing]
-
-i=3
-sapply(qvalMissing, function(q) mcols(y)[txpGeneGroup[[q]],"pvalue"])
-sapply(qvalMissing[i], function(q) mcols(yAll)[qvalNoStopGeneGroup[[3]][[q]],"pvalue"])
-sapply(qvalMissing, function(q) mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[q]])[[1]],"pvalue"])
-
-mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
-
-inds <- which(df[,2] > 0.2)
-i=inds[4]
-mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
-
-i=inds[5]
-mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
-
-i=inds[6]
-mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
-mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
-
-sapply(inds, function(i) {
-    txps <- txpGeneGroup[[qvalMissing[i]]]
-    pvals <- mcols(y)[txps, "pvalue"]
-    pInds <- which(!is.na(pvals))
-    logFC <- mcols(y)[txps, "log2FC"]
-    pos <- sum(logFC[pInds] > 0)
-    neg <- sum(logFC[pInds] < 0)
-
-    if(pos > 0 & neg > 0)
-        return(T)
-    return(F)
-})
+# trueDTUTxp <- intersect(dtu.genes, names(combPvalstxp[[2]]))
+# trueDTUNS <- intersect(dtu.genes, names(combPvalsqvalNoStop[[2]][[3]]))
+# commDTUs <- intersect(trueDTUNS, trueDTUTxp) ###True DTUs
+# 
+# genesOnlyTxp <- intersect(commDTUs,names(combPvalstxp[[2]])[which(combPvalstxp[[2]] <= 0.1)])
+# genesOnlyNoStop <- intersect(commDTUs,names(combPvalsqvalNoStop[[2]][[3]])[which(combPvalsqvalNoStop[[2]][[3]] <= 0.1)])
+# 
+# qvalMissing <- setdiff(genesOnlyTxp, genesOnlyNoStop)
+# nostopMissing <- setdiff(genesOnlyNoStop, genesOnlyTxp)
+# #
+# print(sum(setdiff(txpMissing, qvalMissing) %in% genes[which(combPvalsqvalNoStop[[3]][[3]] <= 0.1)]))
+# combPvalsqvalNoStop[[2]][[3]][qvalMissing]
+# 
+# df <- data.frame(txp=rep(1,length(qvalMissing)), qval=rep(1,length(qvalMissing)))
+# rownames(df) <- qvalMissing
+# df[qvalMissing,1] <- combPvalstxp[[2]][qvalMissing]
+# df[qvalMissing,2] <- combPvalsqvalNoStop[[2]][[3]][qvalMissing]
+# 
+# i=3
+# sapply(qvalMissing, function(q) mcols(y)[txpGeneGroup[[q]],"pvalue"])
+# sapply(qvalMissing[i], function(q) mcols(yAll)[qvalNoStopGeneGroup[[3]][[q]],"pvalue"])
+# sapply(qvalMissing, function(q) mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[q]])[[1]],"pvalue"])
+# 
+# mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
+# 
+# inds <- which(df[,2] > 0.2)
+# i=inds[4]
+# mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
+# 
+# i=inds[5]
+# mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
+# 
+# i=inds[6]
+# mcols(y)[txpGeneGroup[[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[qvalNoStopGeneGroup[[3]][[qvalMissing[i]]],"pvalue"]
+# mcols(yAll)[Descendants(tree,qvalNoStopGeneGroup[[3]][[qvalMissing[i]]])[[1]],"pvalue"]
+# 
+# sapply(inds, function(i) {
+#     txps <- txpGeneGroup[[qvalMissing[i]]]
+#     pvals <- mcols(y)[txps, "pvalue"]
+#     pInds <- which(!is.na(pvals))
+#     logFC <- mcols(y)[txps, "log2FC"]
+#     pos <- sum(logFC[pInds] > 0)
+#     neg <- sum(logFC[pInds] < 0)
+# 
+#     if(pos > 0 & neg > 0)
+#         return(T)
+#     return(F)
+# })
 #
 # fpsQ <- setdiff(genes[which(combPvalsqvalNoStop[[1]][[3]] <= 0.1)],trueDTU)
 ```
 Around genes with dtu identified by the method though
 
 ```{r}
-posNodes <- which(abs(logFCNodes) > rootFC-0.001)
-cAf <- intersect(tAfter[[3]][["candNodeO"]], posNodes)
-cAfNoStop <- intersect(tAfterNoStop[[3]][["candNodeO"]], posNodes)
-length(intersect(cAf, cAfNoStop))
+commGenes <- intersect(names(combPvalstxp[[2]]), names(combPvalsqvalNoStop[[2]][[3]]))
+dtu.req <- intersect(dtu.genes, commGenes)
+fpTxp <- intersect(setdiff(names(combPvalstxp[[2]])[which(combPvalstxp[[2]] <= 0.1)], dtu.req), commGenes)
+fpNStop <- intersect(setdiff(names(combPvalsqvalNoStop[[2]][[3]])[combPvalsqvalNoStop[[2]][[3]] <= 0.1], dtu.req),commGenes)
+
+fpMiss <- setdiff(fpNStop, fpTxp)
+df <- data.frame(txp=rep(1,length(fpMiss)), qval=rep(1,length(fpMiss)))
+df[,1] <- combPvalstxp[[2]][fpMiss]
+df[,2] <- combPvalsqvalNoStop[[2]][[3]][fpMiss]
+
+mcols(yAll)[qvalNoStopGeneGroup[[3]][[fpMiss[i]]],]
+mcols(y)[txpGeneGroup[[fpMiss[i]]],]
+```
+
+```{r}
+# posNodes <- which(abs(logFCNodes) > rootFC-0.001)
+# cAf <- intersect(tAfter[[3]][["candNodeO"]], posNodes)
+# cAfNoStop <- intersect(tAfterNoStop[[3]][["candNodeO"]], posNodes)
+# length(intersect(cAf, cAfNoStop))
+```
+
+```{r}
+# txpQvals <- sapply(txpGeneGroup, function(x) min(mcols(y)[x,"qvalue"], na.rm=T))
+# save(txpQvals, file = "environment/brain_sim/final1_NA/gene_group/txpQvals.RData")
+# groupQvals <- mclapply(qvalGeneGroup, function(qG) sapply(qG, function(x) min(mcols(yAll)[x,"qvalue"], na.rm=T)), mc.cores=3)
+# save(groupQvals, file = "environment/brain_sim/final1_NA/gene_group/groupQvals.RData")
+groupNoStopQvals <- mclapply(qvalNoStopGeneGroup, function(qG) sapply(qG, function(x) min(mcols(yAll)[x,"qvalue"], na.rm=T)), mc.cores=3)
+save(groupNoStopQvals, file = "environment/brain_sim/final1_NA/gene_group/groupNoStopQvals.RData")
+```
+
+```{r}
+alphas <- c(0.01, 0.05, 0.1)
+dfGeneMet <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+genes <- names(txpGeneGroup)
+trueDTU <- intersect(dtu.genes, genes)
+stats <-  sapply(alphas, function(alpha) computeTPFP(match(trueDTU, genes), which(txpQvals <= alpha), logFC=txpQvals, "all"))
+colnames(stats) <- colnames(dfGeneMet)[c(3:5)]
+
+stats <- cbind(Method=rep("Gene",2), Metric = c("FDR", "TPR"), stats)
+dfGeneMet <- rbind(dfGeneMet, stats)
+
+stats <- sapply(seq_along(groupQvals), function(j) {
+        genes <- names(groupQvals[[j]])
+        trueDTU <- intersect(dtu.genes, genes)
+        computeTPFP(match(trueDTU, genes), which(groupQvals[[j]] <= alphas[j]), logFC=groupQvals[[j]], "all")
+    })
+
+colnames(stats) <- colnames(dfGeneMet)[c(3:5)]
+stats <- cbind(Method=rep("group",2), Metric = c("FDR", "TPR"), stats)
+dfGeneMet <- rbind(dfGeneMet, stats)
+
+stats <- sapply(seq_along(groupNoStopQvals), function(j) {
+        genes <- names(groupNoStopQvals[[j]])
+        trueDTU <- intersect(dtu.genes, genes)
+        computeTPFP(match(trueDTU, genes), which(groupNoStopQvals[[j]] <= alphas[j]), logFC=groupNoStopQvals[[j]], "all")
+    })
+colnames(stats) <- colnames(dfGeneMet)[c(3:5)]
+stats <- cbind(Method=rep("groupNoStop",2), Metric = c("FDR", "TPR"), stats)
+dfGeneMet <- rbind(dfGeneMet, stats)
+
+print(dfGeneMet)
 ```

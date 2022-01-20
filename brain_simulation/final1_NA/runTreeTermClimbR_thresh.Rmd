@@ -38,12 +38,12 @@ print(table(signs, levels))
 yAll <- labelKeep(yAll)
 set.seed(100)
 yAll <- swish(yAll, x="condition")
-# print(system.time(tAfter <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = T, temp=T)))
-# save(tAfter, file = "environment/brain_sim/final1_NA/tAfter.RData")
-tAfSignThr <- list()
-minPs <- c(0.55,0.60,0.80,0.90)
-for(i in seq_along(minPs)) {
-    tAfSignThr[[i]] <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = T, temp=T, minP=minPs[i])
-    save(tAfSignThr, file = "environment/brain_sim/final1_NA/tAfSignThr.RData")
-}
+print(system.time(tAfter <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = T, temp=T)))
+save(tAfter, file = "environment/brain_sim/final1_NA/tAfter.RData")
+# tAfSignThr <- list()
+# minPs <- c(0.55,0.60,0.80,0.90)
+# for(i in seq_along(minPs)) {
+#     tAfSignThr[[i]] <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = T, temp=T, minP=minPs[i])
+#     save(tAfSignThr, file = "environment/brain_sim/final1_NA/tAfSignThr.RData")
+# }
 ```

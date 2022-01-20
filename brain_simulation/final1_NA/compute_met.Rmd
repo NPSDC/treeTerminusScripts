@@ -35,10 +35,10 @@ load("environment/brain_sim/final1_NA/tBeforeBH.RData")
 load("environment/brain_sim/final1_NA/tBeforeNoStopBH.RData")
 
 
-load("environment/brain_sim/benchmark/bSwish.RData")
+load("environment/brain_sim/final1_NA/benchmark/bSwish.RData")
 
 load("environment/brain_sim/benchmark/bouthBrain.RData")
-load("environment/brain_sim/benchmark/dfOldTerm.RData")
+load("environment/brain_sim/final1_NA/benchmark/dfOldTerm.RData")
 #load("environment/brain_sim/tbeforeqvalNoStop.RData")
 ```
 
