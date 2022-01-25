@@ -716,7 +716,8 @@ computeWeightedLFC <- function(y, tNodes, type = "sum") {
     return(sqrt(sum(lfcCounts[nodes]^2/lfcVar[nodes])))
   }  
   lfcCounts <- compLFC(assays(y)[["counts"]], colData(y)[["condition"]]) ## count LFC
-  varThresh <- log2(exp(1))^2*(1/(rowMeans(assays(y)[["counts"]][,colData(y)[["condition"]]==1])+1) + 1/(rowMeans(assays(y)[["counts"]][,colData(y)[["condition"]]==2])+1)) ## threshold for variance
+  #varThresh <- log2(exp(1))^2*(1/(rowMeans(assays(y)[["counts"]][,colData(y)[["condition"]]==1])+1) + 1/(rowMeans(assays(y)[["counts"]][,colData(y)[["condition"]]==2])+1)) ## threshold for variance
+  varThresh <- log2(exp(1))^2*(1/(rowSums(assays(y)[["counts"]][,colData(y)[["condition"]]==1])+1) + 1/(rowSums(assays(y)[["counts"]][,colData(y)[["condition"]]==2])+1)) ## threshold for variance
   
   lfcReps <- sapply(assayNames(y)[grepl("infRep", assayNames(y))], function(rep) compLFC(assays(y)[[rep]], colData(y)[["condition"]])) ## lfc for inf replicates
   lfcVar <- rowVars(lfcReps) ## variance over LFC inferential replicates
@@ -725,4 +726,16 @@ computeWeightedLFC <- function(y, tNodes, type = "sum") {
   if(is.null(tNodes)) {
     return(list(lfcCounts, varThresh, lfcVar))
   }
+}
+
+convAllTreeTxp <- function(clusFile, txpInd=28288) {
+  trees <- read.tree(clusFile)
+  trees <- lapply(trees, function(tr) {
+    if(length(tr$tip)>2){
+      tips <- as.numeric(tr$tip)
+      tips <- tips[tips > txpInd]
+      return(drop.tip(tr, tip=as.character(tips)))
+    }
+  })
+  trees <- trees[!sapply(trees, is.null)]
 }
