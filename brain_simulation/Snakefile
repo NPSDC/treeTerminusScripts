@@ -1,5 +1,6 @@
 import yaml
-configfile: "config.json"
+from os.path import join
+#configfile: "config.json"
 
 with open('cluster_partition.conf', 'r') as f:
     partitions = yaml.safe_load(f)
@@ -7,29 +8,57 @@ with open('cluster_partition.conf', 'r') as f:
 def get_partition(rule_name):
     return partitions[rule_name] if rule_name in partitions else partitions['__default__']
 
+exp_dir=config['exp_directory'] ##directory of experiment - aka where all subfolder will reside
+post_type=config["posterior_type"] ##specific type of posterior sampling gibbs or bootstrap
 REPLICATES=config['replicates']
 
+fasta_path=join(exp_dir, config['txp_fasta']) ##path of transcript fasta
+read_path=join(exp_dir, config['read_path']) ##path where fastq files are stored
+read_fasta_file=join(read_path, "{rep}", "sample_0{cond}_{read}.fasta")
+read_fasta_file_rgen=join(read_path, "{{rep}}", "sample_0{cond}_{read}.fasta")
+read_fasta_file_sal=join(read_path, "{{rep}}", "sample_0{{cond}}_{read}.fasta")
+
+nrep=config["nreplicates"] ##number of posterior samples
+tf=16
+
+post_dir=join(exp_dir, "post_type={}_nrep={}").format(post_type, nrep)
+if(post_type=="gibbs"):
+    tf=config["thinning_factor"]
+    post_dir=join(exp_dir, "post_type={}_nrep={}_tf={}").format(post_type, nrep, tf) ##thinning factor additional for gibbs
+#else:
+
+out_sal_dir=join(post_dir, config['out_sal_path'])
+out_sal_quant=join(out_sal_dir, "{rep}_{cond}", "quant.sf")
+
+txp_ref = join(exp_dir, config["txp_fasta"])
+sal_ind_path = join(exp_dir, config["sal_ind_path"])
+read_fasta_file_pe1 = read_fasta_file_sal.format(read=1)
+read_fasta_file_pe2 = read_fasta_file_sal.format(read=2)
+
+term_out_dir = join(post_dir, config['out_term_path'])
+term_group = join(term_out_dir, "{rep}_{cond}/groups.txt")
+clust_nwk = join(term_out_dir, 'cluster_nwk.txt')
 # rule all:
 #     #input:expand(config["read_path"] + "/{rep}/sample_0{cond}_{read}.fasta", rep=REPLICATES, cond=[1,2], read=[1,2])
-#     input:expand(config['out_sal_path'] + "/{rep}_{cond}/quant.sf", rep=REPLICATES, cond=[1,2])
+#     input:expand(out_sal_quant, rep=REPLICATES, cond=[1,2])
 #     params:
 #         partition = get_partition('all')
 
 rule run_terminus:
-    input:config['out_term_path'] + "/cluster_nwk.txt"
+    input:clust_nwk
         #p1 = expand(config['out_term'] + "/{run}/groups.txt", run=up_runs),
     params:
         partition = get_partition('run_terminus')
 
 rule run_term_collapse:
     input:
-        expand(config['out_term_path'] + "/{rep}_{cond}/groups.txt", rep=REPLICATES, cond=[1,2])
+        expand(term_group, rep=REPLICATES, cond=[1,2])
     output:
-        config['out_term_path'] + "/cluster_nwk.txt"
+        clust_nwk
     params:
-        term_path=config["term_path"],
-        input=config["out_sal_path"],
-        output = config['out_term_path'],
+        term_path = config["term_path"],
+        input = out_sal_dir,
+        output = term_out_dir,
         partition = get_partition('run_term_collapse')
     shell:
         """
@@ -40,42 +69,48 @@ rule run_term_collapse:
 
 rule run_term_group:
     input:
-        config['out_sal_path'] + "/{rep}_{cond}/quant.sf"
+        out_sal_quant
     output:
-        config['out_term_path'] + "/{rep}_{cond}/groups.txt"
+        term_group
     params:
         term_path=config["term_path"] + "/target/release/terminus",
         partition = get_partition('run_term_group'),
-        output = config['out_term_path'],
-        input = config['out_sal_path'] + "/{rep}_{cond}"
+        output = term_out_dir,
+        input = join(out_sal_dir,  "{rep}_{cond}")
     shell:
         "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output}  --thr false"
 
 
-
 rule run_salmon:
     input:
-        inp_fastq1 = config['read_path'] + "/{rep}/sample_0{cond}_1.fasta",
-        inp_fastq2 = config['read_path'] + "/{rep}/sample_0{cond}_2.fasta",
-        index = config['sal_ind_path'] + "/pos.bin"
+        inp_fastq1 = read_fasta_file_pe1,
+        inp_fastq2 = read_fasta_file_pe2,
+        index = join(sal_ind_path, "pos.bin")
     output:
-        out_sal = config['out_sal_path'] + "/{rep}_{cond}/quant.sf"
+        out_sal_quant
     resources: cpus=10, mem=32000
     params:
-        out_dir = config['out_sal_path'] + "/{rep}_{cond}",
+        out_dir = join(out_sal_dir, "{rep}_{cond}"),
         partition = get_partition('run_salmon'),
         sal_path = config['sal_path'],
-        sal_ind = config['sal_ind_path']
-    shell:
-        "{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias "
-        "--numGibbsSamples 100 --thinningFactor 100 -d "
-        "-o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}"
+        sal_ind = sal_ind_path,
+        nrep = nrep,
+        tf = tf
+    run:
+        if post_type == "gibbs":
+            shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
+            --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
+            -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+        else:
+            shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
+            --numBootstraps {params.nrep} -d \
+            -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
 
 rule build_sal_ind:
-    input:config['txp_fasta']
-    output:config['sal_ind_path'] + "/pos.bin"
+    input:txp_ref
+    output:join(sal_ind_path, "pos.bin")
     params:
-        out_ind_path = config['sal_ind_path'],
+        out_ind_path = sal_ind_path,
         partition = get_partition('build_sal_ind'),
         sal_path = config['sal_path']
     resources:cpus=10, mem=32000
@@ -84,19 +119,24 @@ rule build_sal_ind:
            {params.sal_path} index --keepDuplicates -p {resources.cpus} -t {input} -i {params.out_ind_path}
         """
 
+rule all_reads:
+    input:expand(read_fasta_file, rep=REPLICATES, cond=[1,2], read=[1,2])
+    params:
+        partition = get_partition('make_reads')
 rule make_reads:
     input:
         sim="/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/brain_sim/simulate.rda",
     params:
+        sim_path=config["sim_path"],
 	    reads = "{rep}",
-	    fasta_path = config['txp_fasta'],
-	    out_path = config['read_path'],
+	    fasta_path = fasta_path,
+	    read_path = read_path,
 	    partition = get_partition('make_reads')
     output:
-        expand(config["read_path"] + "/{{rep}}/sample_0{cond}_{read}.fasta",  cond=[1,2], read=[1,2])
+        expand(read_fasta_file_rgen,  cond=[1,2], read=[1,2])
     shell:
         """
             source ~/.bashrc
             conda activate R4.1
-            Rscript --vanilla simulate_reads.R {params.reads} {params.fasta_path} {params.out_path}
+            Rscript --vanilla {params.sim_path} {params.reads} {params.fasta_path} {params.read_path}
         """
