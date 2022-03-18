@@ -1,0 +1,126 @@
+---
+title: "EffLen"
+author: "Noor Pratap Singh"
+date: "3/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Computing TPMS
+```{r}
+suppressPackageStartupMessages(library(GenomicFeatures))
+suppressPackageStartupMessages(library(forcats))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim/mapDf.RData")
+ann_dir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation"
+gtf <- file.path(ann_dir, "gencode.v26.annotation.gtf.gz")
+txdb.filename <- file.path(ann_dir, "gencode.v26.annotation.sqlite")
+txdb <- loadDb(txdb.filename)
+ebt <- exonsBy(txdb, by="tx", use.names=TRUE)
+txp.len <- sum(width(ebt))
+
+trueCountsDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/mode=no_gc_bias/reads_fastq"
+files <- c(paste(trueCountsDir, seq(6), "true_1.tsv", sep="/"), paste(trueCountsDir, seq(6), "true_2.tsv", sep="/"))
+#dfFiles <- data.frame(files=files, condition = as.factor(rep(c(1,2),each=6)))
+dfTC <- lapply(files, function(f) read.delim(f, header = T))
+dfC <- matrix(0, nrow = nrow(mapDf), ncol = 12, dimnames = list(mapDf[["TXNAME"]], paste(outer(c(1:6), c(1:2), function(x,y) paste(x,y,sep="_")))))
+
+for(i in seq_along(files))
+    dfC[dfTC[[i]][["Transcript"]],i] <- dfTC[[i]][,"Counts"]
+
+txp.len <- txp.len[rownames(dfC)]
+effLen <- sapply(txp.len, compEffLenTxp)
+tpmsO <- compTPM(dfC, effLen)
+```
+
+
+#### Extracting False positives
+```{r}
+load("environment/brain_sim/final1_NA/tAfter.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/simulate.rda")
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+#logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)- log2(aggCountsNodes[,1]+1))
+dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+dtus <- setdiff(dtus, dtus[which(abs(logFCNodes[dtus]) <= 0.01)])
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+
+allInnNodes <- lapply(tAfter, function(ta) c(ta[["candNodeO"]], ta[["negNodeO"]], ta[["naNodeO"]]))
+allInnNodes <- lapply(allInnNodes, function(nodes) nodes[nodes > length(tree$tip)])
+remLeaves <- lapply(allInnNodes, function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+posLeaves <- lapply(seq_along(remLeaves), function(i) remLeaves[[i]][which(mcols(y)[remLeaves[[i]],"qvalue"] < c(0.01,0.05,0.1)[i])])
+detNodes[["tAfter"]] <- lapply(seq_along(posLeaves), function(i) c(posLeaves[[i]], tAfter[[i]][["candNodeO"]][tAfter[[i]][["candNodeO"]] > length(tree$tip)]))
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+negNodes[["tAfter"]] <- lapply(detNodes[["tAfter"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+```
+
+#### Extracting Inner nodes
+```{r}
+innPosNodes <- lapply(tAfter, function(ta) ta[["candNodeO"]][ta[["candNodeO"]] > length(tree$tip)])
+fps <- lapply(innPosNodes, function(nodes) nodes[abs(logFCNodes[nodes]) < rootFC])
+fpO <- fps[[3]][order(mcols(yAll)[["meanInfRV"]][fps[[3]]])]
+```
+
+#### Plotting
+
+```{r}
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[1])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+dfTPM <- data.frame(cbind(t(round(tpmsO[rownames(y)[Descendants(tree, fpO[1])[[1]]],],2)), rep=colnames(y), cond=rep(c(1,2),each=6)))
+# ## True Counts
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000492561.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000216034.5, color=factor(cond))) + geom_point(), common.legend=T)
+ggarrange(ggplot(dfTPM, aes(fct_inorder(rep), ENST00000492561.1, color=factor(cond))) + geom_point(),
+          ggplot(dfTPM, aes(fct_inorder(rep), ENST00000216034.5, color=factor(cond))) + geom_point(), common.legend=T)
+```
+
+```{r}
+i=2
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+dfTPM <- data.frame(cbind(round(t(tpmsO[rownames(y)[Descendants(tree, fpO[i])[[1]]],]),2), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000616261.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000373477.8, color=factor(cond))) + geom_point(), common.legend=T)
+ggarrange(ggplot(dfTPM, aes(fct_inorder(rep), ENST00000616261.1, color=factor(cond))) + geom_point(),
+          ggplot(dfTPM, aes(fct_inorder(rep), ENST00000373477.8, color=factor(cond))) + geom_point(), common.legend=T)
+```
+
+```{r}
+i=5
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+dfTPM <- data.frame(cbind(round(t(tpmsO[rownames(y)[Descendants(tree, fpO[i])[[1]]],]),2), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000378106.9, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000378081.9, color=factor(cond))) + geom_point(), common.legend=T)
+ggarrange(ggplot(dfTPM, aes(fct_inorder(rep), ENST00000378106.9, color=factor(cond))) + geom_point(),
+          ggplot(dfTPM, aes(fct_inorder(rep), ENST00000378081.9, color=factor(cond))) + geom_point(), common.legend=T)
+```
+
+```{r}
+i <- 36
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+dfTPM <- data.frame(cbind(round(t(tpmsO[rownames(y)[Descendants(tree, fpO[i])[[1]]],]),2), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000406395.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000438754.6, color=factor(cond))) + geom_point(), common.legend=T)
+ggarrange(ggplot(dfTPM, aes(fct_inorder(rep), ENST00000406395.5, color=factor(cond))) + geom_point(),
+          ggplot(dfTPM, aes(fct_inorder(rep), ENST00000438754.6, color=factor(cond))) + geom_point(), common.legend=T)
+```
