@@ -79,7 +79,7 @@ runSwishtree <- function(tree, ySwish, type) {
     if(type == "tree")
         tnames <- tree$tip.label
     ySwish <- ySwish[tnames,]
-    mcols(ySwish)[,'keep'] <- TRUE
+    #mcols(ySwish)[,'keep'] <- TRUE
     set.seed(1)
     ySwish <- swish(ySwish, x="condition")
     ySwish <- computeInfRV(ySwish)
@@ -738,4 +738,21 @@ convAllTreeTxp <- function(clusFile, txpInd=28288) {
     }
   })
   trees <- trees[!sapply(trees, is.null)]
+}
+
+compEffLenTxp <- function(txp_len, max_len=1000, mean = 200, sd = 25)
+{
+  library(truncnorm)
+  if(txp_len > max_len)
+    return(txp_len-mean)
+  new_mean = mean(truncnorm::rtruncnorm(n=10000, b=txp_len, mean=mean, sd=sd))
+  return(ifelse(txp_len-new_mean > 0,txp_len-new_mean, new_mean-txp_len))
+}
+
+compTPM <- function(counts, effLen) {
+  if(nrow(counts) != length(effLen))
+    stop("Lenghts not same as counts")
+    vals <- counts/effLen
+    tpms <- 1e6*t(t(vals)/(colSums(vals)))
+    return(tpms)
 }
