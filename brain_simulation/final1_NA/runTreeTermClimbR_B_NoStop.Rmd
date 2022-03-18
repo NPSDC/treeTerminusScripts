@@ -38,7 +38,6 @@ print(table(signs, levels))
 ```{r}
 yAll <- labelKeep(yAll)
 set.seed(100)
-yAll <- swish(yAll, x="condition")
-print(system.time(tBeforeNoStop <- runTreeTermAlphas(tree, yAll, "condition", -10000, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
-save(tBeforeNoStop, file = "environment/brain_sim/final1_NA/tBeforeNoStop.RData")
+print(system.time(tBeforeNoStopQval <- runTreeTermAlphas(tree, yAll, "condition", -10000, pCutOff = 0.05, pChild = 0.05, runType = c("b"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, cSign = F, temp=T)))
+save(tBeforeNoStopQval, file = "environment/brain_sim/final1_NA/tBeforeNoStopQval.RData")
 ```

@@ -1,0 +1,209 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("bouth_helper.R"))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/simulate.rda")
+# load("environment/brain_sim/final1_NA/tAfterIHW.RData")
+# load("environment/brain_sim/final1_NA/tAfterIHWNoSign.RData")
+# load("environment/brain_sim/final1_NA/tAfterIHWNoStop.RData")
+# load("environment/brain_sim/final1_NA/tAfterBH.RData")
+# load("environment/brain_sim/final1_NA/tAfterBH_NoSign.RData")
+# load("environment/brain_sim/final1_NA/tAfterBH_NoStop.RData")
+
+load("environment/brain_sim/final1_NA/tAfter.RData")
+load("environment/brain_sim/final1_NA/tAfterNoSign.RData")
+load("environment/brain_sim/final1_NA/tAfterNoStop.RData")
+load("environment/brain_sim/final1_NA/tBeforeNoStopQval.RData")
+load("environment/brain_sim/final1_NA/tBeforeQval.RData")
+# load("environment/brain_sim/final1_NA/tBefore.RData")
+# load("environment/brain_sim/final1_NA/tBeforeNoSign.RData")
+# load("environment/brain_sim/final1_NA/tBeforeNoStop.RData")
+# load("environment/brain_sim/final1_NA/tBeforeBH.RData")
+# load("environment/brain_sim/final1_NA/tBeforeNoStopBH.RData")
+
+load("environment/brain_sim/final1_NA/benchmark/bSwish.RData")
+
+load("environment/brain_sim/benchmark/bouthBrain.RData")
+load("environment/brain_sim/final1_NA/benchmark/dfOldTerm.RData")
+#load("environment/brain_sim/tbeforeqvalNoStop.RData")
+```
+
+```{r}
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)- log2(aggCountsNodes[,1]+1))
+dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+dtus <- setdiff(dtus, dtus[which(abs(logFCNodes[dtus]) <= 0.01)])
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+print(mean(abs(logFCNodes[dtus]) > rootFC))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+# detNodes[["tAfterIHW"]] <- lapply(tAfterIHW, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterIHWNoSign"]] <- lapply(tAfterIHWNoSign, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterIHWNoStop"]] <- lapply(tAfterIHWNoStop, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterBH"]] <- lapply(tAfterBH, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterBHNoSign"]] <- lapply(tAfterBHNoSign, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterBHNoStop"]] <- lapply(tAfterBHNoStop, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqval"]] <- lapply(tAfter, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterNoStop, function(ta) ta[["candNodeO"]])
+detNodes[["tBeforeqval"]] <- lapply(tBeforeQval, function(ta) ta[["candNodeO"]])
+detNodes[["tBeforeqvalNoStop"]] <- lapply(tBeforeNoStopQval, function(ta) ta[["candNodeO"]])
+
+# detNodes[["tbeforeIHW"]] <- lapply(tbeforeIHW, function(ta) ta[["candNodeO"]])
+# detNodes[["tbeforeIHWNoSign"]] <- lapply(tbeforeIHWNoSign, function(ta) ta[["candNodeO"]])
+# detNodes[["tbeforeIHWNoStop"]] <- lapply(tbeforeIHWNoStop, function(ta) ta[["candNodeO"]])
+# detNodes[["tBeforeqval"]] <- lapply(tBefore, function(ta) ta[["candNodeO"]])
+# detNodes[["tBeforeqvalNoSign"]] <- lapply(tBeforeNoSign, function(ta) ta[["candNodeO"]])
+# detNodes[["tBeforeqvalNoStop"]] <- lapply(tBeforeNoStop, function(ta) ta[["candNodeO"]])
+# detNodes[["tBeforeBH"]] <- lapply(tBeforeBH, function(ta) ta[["candNodeO"]])
+# # detNodes[["tBeforeBHNoSign"]] <- lapply(tBeforeBHNoSign, function(ta) ta[["candNodeO"]])
+# detNodes[["tBeforeBHNoStop"]] <- lapply(tBeforeBHNoStop, function(ta) ta[["candNodeO"]])
+
+
+detNodes[["treeClimbR"]] <- lapply(bSwish, function(sw) sw$output[sw$output$signal.node,][["node"]])
+detNodes[["treeClimbRO"]] <- lapply(bSwish, function(sw) unlist(Descendants(tree,sw$output[sw$output$signal.node,][["node"]])))
+# detNodes[["bouth"]] <- lapply(bouth_brain, function(bouth) extractBouthNodes(bouth, y))
+```
+
+```{r}
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+# negNodes[["tAfterIHW"]] <- lapply(tAfterIHW, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]], ta[["negNodeO"]]))))
+# negNodes[["tAfterIHWNoSign"]] <- lapply(tAfterIHWNoSign, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+# negNodes[["tAfterIHWNoStop"]] <- lapply(tAfterIHWNoStop, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+# negNodes[["tAfterBH"]] <- lapply(tAfterBH, function(ta) c(ta[["naNodeO"]],ta[["negNodeO"]]))
+# negNodes[["tAfterBHNoSign"]] <- lapply(tAfterBHNoSign, function(ta) c(ta[["naNodeO"]],ta[["negNodeO"]]))
+# negNodes[["tAfterBHNoStop"]] <- lapply(tAfterBHNoStop, function(ta) c(ta[["naNodeO"]],ta[["negNodeO"]]))
+
+negNodes[["tAfterqval"]] <- lapply(tAfter, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterNoSign, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterNoStop, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+
+negNodes[["tBeforeqval"]] <- lapply(tBeforeQval, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tBeforeqvalNoStop"]] <- lapply(tBeforeNoStopQval, function(ta) unlist(Descendants(tree, c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+
+# negNodes[["tbeforeIHW"]] <- lapply(tbeforeIHW, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeIHWNoSign"]] <- lapply(tbeforeIHWNoSign, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeIHWNoStop"]] <- lapply(tbeforeIHWNoStop, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeqval"]] <- lapply(tbeforeqval, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeqvalNoSign"]] <- lapply(tbeforeqvalNoSign, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeqvalNoStop"]] <- lapply(tbeforeqvalNoStop, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeBH"]] <- lapply(tbeforeBH, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeBHNoSign"]] <- lapply(tbeforeBHNoSign, function(ta) ta[["negNodeO"]])
+# negNodes[["tbeforeBHNoStop"]] <- lapply(tbeforeBHNoStop, function(ta) ta[["negNodeO"]])
+
+
+#negNodes[["treeClimbR"]] <- lapply(detNodes[["treeClimbR"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+negNodes[["treeClimbRO"]] <- lapply(detNodes[["treeClimbRO"]], function(det) setdiff(seq(nrow(y)), det))
+# negNodes[["bouth"]] <- lapply(detNodes[["bouth"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    print(n)
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+
+y <- labelKeep(y)
+
+y200 <- list()
+for(i in seq(10)) {
+    y200[[i]] <- swish(y, x="condition", nperms=200, estPi0=T)
+    mcols(y200[[i]])[["pvalue"]][!mcols(y200[[i]])[["keep"]]] <- runif(sum(!mcols(y200[[i]])[["keep"]]),0,1)
+    mcols(y200[[i]])[["qvalue"]] <- p.adjust(mcols(y200[[i]])[["pvalue"]], method = "BH")
+    n <- paste("y200",i, sep="_")
+    detNodes[[n]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y200[[i]])[,"qvalue"] <= x ))
+    negNodes[[n]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y200[[i]])[,"qvalue"] > x ))
+    
+}
+
+y100 <- list()
+for(i in seq(10)) {
+    y100[[i]] <- swish(y, x="condition", nperms=100, qvaluePkg="samr")
+    # mcols(y100[[i]])[["pvalue"]][!mcols(y100[[i]])[["keep"]]] <- runif(sum(!mcols(y100[[i]])[["keep"]]),0,1)
+    # mcols(y100[[i]])[["qvalue"]] <- p.adjust(mcols(y100[[i]])[["pvalue"]], method = "BH")
+    n <- paste("y100",i, sep="_")
+    detNodes[[n]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y100[[i]])[,"qvalue"] <= x ))
+    negNodes[[n]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y100[[i]])[,"qvalue"] > x ))
+    
+}
+
+yAll100 <- list()
+for(i in seq(10)) {
+    yAll100[[i]] <- swish(yAll, x="condition", nperms=100)
+    n <- paste("y100A",i, sep="_")
+    detNodes[[n]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(yAll100[[i]])[,"qvalue"] <= x ))
+    negNodes[[n]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(yAll100[[i]])[,"qvalue"] > x ))
+    
+}
+
+y200_1 <- swish(y, x="condition", nperms=200)
+mcols(y200_1)[["pvalue"]][!mcols(y)[["keep"]]] <- runif(sum(!mcols(y200_1)[["keep"]]),0.1,1)
+mcols(y200_1)[["qvalue"]] <- p.adjust(mcols(y200_1)[["pvalue"]], method = "BH")
+detNodes[["Swish200_1"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y200_2)[,"qvalue"] <= x ))
+negNodes[["Swish200_1"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y200_2)[,"qvalue"] > x ))
+
+mcols(y)[["pvalue"]][!mcols(y)[["keep"]]] <- runif(sum(!mcols(y)[["keep"]]),0.1,1)
+mcols(y)[["qvalue"]] <- p.adjust(mcols(y)[["pvalue"]], method = "BH")
+detNodes[["Swish10"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+negNodes[["Swish10"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] > x ))
+
+
+mcols(y)[["pvalue"]][!mcols(y)[["keep"]]] <- runif(sum(!mcols(y)[["keep"]]),0.1,1)
+mcols(y)[["qvalue"]] <- p.adjust(mcols(y)[["pvalue"]], method = "BH")
+detNodes[["Swish25"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+negNodes[["Swish25"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] > x ))
+```
+
+```{r}
+colnames(dfOldTerm) <- colnames(df)
+df <- rbind(df, dfOldTerm)
+dfFix <- fixDf(df)
+ggplot(dfFix, aes(FDR, TPR, color=Method)) + geom_point() + geom_line()
+
+methods <- c("Swish", "tAfterqval", "tAfterqvalNoSign", "tAfterqvalNoStop", "tbeforeqval", "tbeforeqval", "tbeforeqvalNoSign", "tbeforeqvalNoStop", "terminus_orig", "treeClimbR")
+dfFix %>% filter(Method %in% methods) %>% ggplot(aes(FDR, TPR, color=Method)) + geom_point() + geom_line()
+```
+
+
+```{r}
+p1 <- -log10(mcols(y100[[2]])[["pvalue"]])[mcols(y100[[1]])[["keep"]]]
+for(i in c(1:10)) {
+    p2 <- -log10(mcols(y100[[i]])[["pvalue"]])[mcols(y100[[1]])[["keep"]]]
+    plot(p1, p2) + abline(0,1,col="red")    
+}
+
+```
+<!-- ```{r} -->
+<!-- print(length(unlist(Descendants(tree,tAfterIHWStop[["candNodeO"]],"tip")))) -->
+<!-- ``` -->

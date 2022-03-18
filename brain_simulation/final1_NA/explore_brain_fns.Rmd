@@ -1,0 +1,194 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/mapDf.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/simulate.rda")
+load("environment/brain_sim/final1_NA/tAfter.RData")
+
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+dtus <- setdiff(dtus, dtus[which(abs(logFCNodes[dtus]) <= 0.01)])
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+signs <- computeSign(yAll, "condition")
+
+negNodes <- c(tAfter[[3]][["naNodeO"]], tAfter[[3]][["negNodeO"]])
+negNodes <- negNodes[order(mcols(yAll)[negNodes, 'meanInfRV'], decreasing = T)]
+
+tpNodes <- match(names(logFCNodes)[abs(logFCNodes) > rootFC], rownames(yAll))
+fns <- intersect(tpNodes, negNodes)
+fns <- fns[order(mcols(yAll)[fns, 'meanInfRV'], decreasing = T)]
+print(length(fns))
+print(sum(fns < nrow(y)))
+fnsL <- fns[fns < nrow(y)]
+```
+
+```{r}
+leavInds <- fnsL[sapply(Ancestors(tree, fnsL), function(x) x[1]==(nrow(y)+1))]
+print(length(leavInds))
+```
+111 transcripts that have root as their ancestor
+
+```{r}
+fnsL <- setdiff(fnsL, leavInds)
+oppInds <- c() ##nodes with one sibling and opposite signs
+multInds <- c() ##nodes with multiple descendants
+manInds <- c() ##nodes with same signs
+for(i in seq_along(fnsL)) {
+    l <- fnsL[i]
+    sib <- Siblings(tree, l)
+    if(length(sib) > 1) {
+        print(paste("Sibling", fnsL[i]))
+        multInds <- c(multInds, fnsL[i])
+    }
+    if(length(sib) == 1) {
+        if(signs[sib]*signs[l] == -1)
+            oppInds <- c(oppInds, fnsL[i])
+        else
+            manInds <- c(manInds, fnsL[i])
+    }    
+}
+
+dfs <- lapply(seq(12), function(i) getTrace(yAll, c(fns[1], Siblings(tree, fns[1])), i))
+pL <- lapply(seq(12), function(i) {
+     dfs[[i]] %>% ggplot(aes(infRep, count,col=feature)) + geom_point() + geom_line()
+})
+
+print(length(oppInds)) ## These get merged (since opposite signs) and cant be helped
+
+anc <- Ancestors(tree, multInds, "parent")
+print(sum(anc == (nrow(y)+1))) ## with root as a parent
+
+multInds <- multInds[anc != (nrow(y)+1)]
+```
+
+```{r}
+i <- 1
+signs[c(oppInds[i], Siblings(tree,oppInds[i]))]
+rownames(y)[c(oppInds[i], Siblings(tree,oppInds[i]))] %in% dtus
+
+i <- 3
+signs[c(oppInds[i], Siblings(tree,oppInds[i]))]
+rownames(y)[c(oppInds[i], Siblings(tree,oppInds[i]))] %in% dtus
+
+i <- 5
+signs[c(oppInds[i], Siblings(tree,oppInds[i]))]
+rownames(y)[c(oppInds[i], Siblings(tree,oppInds[i]))] %in% dtus
+
+i <- 7
+signs[c(oppInds[i], Siblings(tree,oppInds[i]))]
+rownames(y)[c(oppInds[i], Siblings(tree,oppInds[i]))] %in% dtus
+
+i <- 8
+signs[c(oppInds[i], Siblings(tree,oppInds[i]))]
+rownames(y)[c(oppInds[i], Siblings(tree,oppInds[i]))] %in% dtus
+```
+
+
+```{r}
+head(mcols(yAll)[fns,])
+print(mapDf[rownames(y)[fns[1:2]],2] %in% dtus) ## All part of same tree
+
+fns[3]
+mapDf[Descendants(tree, 137495)[[1]],2] %in% dtus ## All part of same tree
+print(signs[Descendants(tree, 137495)[[1]]])
+
+mcols(yAll)[Siblings(tree, fns[4])+0:1,]
+
+mcols(yAll)[fns[5]-0:1,]
+print(signs[c(fns[5]-0:1)])
+
+print(signs[fns[6]-0:1])
+
+signs[fns[7]-0:1]
+
+mcols(yAll[fns[8]+0:1,])
+```
+
+```{r}
+fpC <- c() ## Children with multiple siblings and opposite signs
+for(i in seq_along(multInds)) {
+    sibSigns <- signs[Siblings(tree, multInds[i])]
+    if(!all(sibSigns >= 0) & !all(sibSigns <= 0))
+        fpC <- c(fpC, multInds[i])
+}
+print(length(fpC))
+multInds <- setdiff(multInds, fpC)
+print(length(multInds))
+print(multInds[1])
+print(Siblings(tree, multInds[1]))
+tr <- read.tree(text="(5312:12.0,(((((((((((5284:12.0,5281:12.0):9.00,5286:12.0):3.00,5279:12.0):4.00,
+5277:12.0):1.00,5283:12.0):1.00,(5278:12.0,5300:12.0):2.00,5282:12.0,5288:12.0):2.00,
+5293:12.0):1.00,5294:12.0):1.00,5280:12.0):1.00,5285:12.0):1.00,5291:12.0,(5299:12.0,
+5290:12.0):1.00,5292:12.0):1.00,(5311:12.0,5309:12.0):2.00,(5306:12.0,(5305:12.0,
+5307:12.0):3.00):1.00,5289:12.0,(5296:12.0,(5297:12.0,5295:12.0):3.00):1.00,((5308:12.0,
+5304:12.0):1.00,5301:12.0):1.00,(5302:12.0,5310:12.0):1.00,(5303:12.0,5298:12.0):2.00,
+(5275:12.0,5287:12.0):1.00);")
+plot(tr)
+
+##Sample 1_1
+tr2 <- read.tree(text="((((((((((((((((((((5281,5284),(5286,5309)),5282),5279),5278),5291),5283),5285),5307),5306),5288),5277),5294),5293),5300),5280),5305),5290),5275),((5287,5289),5292),(((((((5295,5298),5296),5299),5310),5304),((5302,5308),5301)),5297),5312,5303,5311);")
+plot(tr2)
+
+##Sample 1_2
+tr3 <- read.tree(text="((((((((((((((((((((5281,5284),(5286,5309)),5282),5279),5278),5291),5283),5285),5307),5306),5288),5277),5294),5293),5300),5280),5305),5290),5275),((5287,5289),5292),(((((((5295,5298),5296),5299),5310),5304),((5302,5308),5301)),5297),5312,5303,5311);")
+plot(tr3)
+
+##Sample 2_2
+tr4 <- read.tree(text="((((((((5309,5311),5301),5302),(5306,5310)),(5279,5292)),(((5285,5294),(5295,5297)),(5290,5299))),5289),((5277,5296),5275),((((((((((5281,5284),5286),5291),5278),5282),5283),5288),5293),5280),5287),((5305,5307),5308),5298,5300,5304,5312,5303);")
+plot(tr4)
+##Sample 2_1
+tr5 <- read.tree(text="((((((((((((((5281,5284),5286),5279),5282),5278),5280),5277),5293),5294),5288),5285),5309),5283),((5308,5310),5275),((((5296,5300),5299),5311),5302),(((((5304,5307),5301),5305),5298),5306),(((5287,5291),
+5290),5292),5312,5303,5295,5289,5297);")
+plot(tr5)
+
+##Sample 3_2
+tr6 <- read.tree(text="((((5275,5290),(((((5295,5297),5303),5294),5304),5287)),(((5302,5310),5301),5293)),((5305,5306),5307),((((((((((((((5279,5286),(5281,5284)),5277),5283),5309),5288),5282),5299),(5278,5300)),5291),5296),5285),5280),5308),5312,5311,5298,5292,5289);")
+plot(tr6)
+##Sample 3_1
+tr7 <- read.tree(text="((5298,5302),((((5305,5307),5299),5308),5304),((((((5275,5309),5287),5306),5301),(((((5294,5296),5292),5295),5288),5300)),5297),(((((((((5281,5284),5278),(((5286,5291),5279),5283)),5285),5280),5282),5277),5290),5293),5310,5311,5289,5303,5312);")
+plot(tr7)
+
+print(mcols(yAll[c(multInds[1], Siblings(tree, multInds[1])),]))
+print(signs[c(multInds[1], Siblings(tree, multInds[1]))])
+```
+
+```{r}
+i <- 2
+print(mcols(yAll[c(multInds[i], Siblings(tree, multInds[i])),])) ##Significant child
+
+i <- 3
+print(mcols(yAll[c(multInds[i], Siblings(tree, multInds[i])),])) ##Significant child
+
+i <- 4
+print(mcols(yAll[c(multInds[i], Siblings(tree, multInds[i])),])) ##Significant child
+```
+
+#### ManInds
+```{r}
+print(length(manInds[which(mcols(yAll)[manInds,"pvalue"] < tAfter[[3]][["pChild"]])])) ### 15 of them are significant
+manInds <- setdiff(manInds, manInds[which(mcols(yAll)[manInds,"pvalue"] < tAfter[[3]][["pChild"]])])
+
+sibs <- unlist(Siblings(tree, manInds)) ## All are length 1
+sum(mcols(yAll)[sibs,"pvalue"] < tAfter[[3]][["pChild"]])
+i <- 1
+mcols(yAll)[manInds[i],]
+```

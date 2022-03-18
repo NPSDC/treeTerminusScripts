@@ -1,0 +1,360 @@
+---
+title: "Metrics with leaves"
+author: "Noor Pratap Singh"
+date: "2/21/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/y.RData")
+load("environment/brain_sim/tree.RData")
+load("environment/brain_sim/simulate.rda")
+
+load("environment/brain_sim/final1_NA/tAfter.RData")
+load("environment/brain_sim/final1_NA/tAfterNoSign.RData")
+load("environment/brain_sim/final1_NA/tAfterNoStop.RData")
+load("environment/brain_sim/mapDf.RData")
+```
+
+```{r}
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+#logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)- log2(aggCountsNodes[,1]+1))
+dtus <- intersect(names(iso.dtu)[iso.dtu], names(logFCNodes))
+dtus <- setdiff(dtus, dtus[which(abs(logFCNodes[dtus]) <= 0.01)])
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+print(mean(abs(logFCNodes[dtus]) > rootFC))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+
+allInnNodes <- lapply(tAfter, function(ta) c(ta[["candNodeO"]], ta[["negNodeO"]], ta[["naNodeO"]]))
+allInnNodes <- lapply(allInnNodes, function(nodes) nodes[nodes > length(tree$tip)])
+remLeaves <- lapply(allInnNodes, function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+posLeaves <- lapply(seq_along(remLeaves), function(i) remLeaves[[i]][which(mcols(y)[remLeaves[[i]],"qvalue"] < c(0.01,0.05,0.1)[i])])
+detNodes[["tAfter"]] <- lapply(seq_along(posLeaves), function(i) c(posLeaves[[i]], tAfter[[i]][["candNodeO"]][tAfter[[i]][["candNodeO"]] > length(tree$tip)]))
+
+allInnNodes <- lapply(tAfterNoStop, function(ta) c(ta[["candNodeO"]], ta[["negNodeO"]], ta[["naNodeO"]]))
+allInnNodes <- lapply(allInnNodes, function(nodes) nodes[nodes > length(tree$tip)])
+remLeaves <- lapply(allInnNodes, function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+posLeaves <- lapply(seq_along(remLeaves), function(i) remLeaves[[i]][which(mcols(y)[remLeaves[[i]],"qvalue"] < c(0.01,0.05,0.1)[i])])
+detNodes[["tAfterNoStop"]] <- lapply(seq_along(posLeaves), function(i) c(posLeaves[[i]], tAfterNoStop[[i]][["candNodeO"]][tAfterNoStop[[i]][["candNodeO"]] > length(tree$tip)]))
+
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+negNodes[["tAfter"]] <- lapply(detNodes[["tAfter"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+negNodes[["tAfterNoStop"]] <- lapply(detNodes[["tAfterNoStop"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    print(n)
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+```{r}
+innPosNodes <- lapply(tAfter, function(ta) ta[["candNodeO"]][ta[["candNodeO"]] > length(tree$tip)])
+print(sapply(innPosNodes, function(nodes) mean(abs(logFCNodes[nodes]) > rootFC)))
+fps <- lapply(innPosNodes, function(nodes) nodes[abs(logFCNodes[nodes]) < rootFC])
+boxplot(mcols(yAll)[fps[[3]], "meanInfRV"])
+
+print(rowMeans(assays(yAll)[["counts"]][fps[[3]],1:6]))
+print(rowMeans(assays(yAll)[["counts"]][fps[[3]],1:6+6]))
+print(logFCNodes[fps[[3]]])
+```
+
+```{r}
+trueCountsDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/reads_fastq"
+files <- c(paste(trueCountsDir, seq(6), "true_1.tsv", sep="/"), paste(trueCountsDir, seq(6), "true_2.tsv", sep="/"))
+#dfFiles <- data.frame(files=files, condition = as.factor(rep(c(1,2),each=6)))
+dfTC <- lapply(files, function(f) read.delim(f, header = T))
+dfC <- matrix(0, nrow = nrow(mapDf), ncol = 12, dimnames = list(mapDf[["TXNAME"]], paste(outer(c(1:6), c(1:2), function(x,y) paste(x,y,sep="_")))))
+
+for(i in seq_along(files))
+    dfC[dfTC[[i]][["Transcript"]],i] <- dfTC[[i]][,"Counts"]
+dfC <- dfC[rownames(y),]
+aggTC <- computeAggNodesU(tree, 1:nrow(yAll), dfC)
+ambDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/post_type=gibbs_nrep=100_tf=100/out_sal"
+ambigFiles <- paste(outer(1:6, 1:2, function(x,y) paste(ambDir, paste(x,y, sep="_"), "aux_info", "ambig_info.tsv", sep="/")))
+dfA <- lapply(ambigFiles, function(f) {
+    df <- read.delim(f, header = T, sep="\t")
+    rownames(df) <- mapDf[["TXNAME"]]
+    df
+    })
+
+```
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(forcats)
+fpO <- fps[[3]][order(mcols(yAll)[["meanInfRV"]][fps[[3]]])]
+print(mcols(yAll)[c(fpO[1],Descendants(tree, fpO[1])[[1]]),])
+dfC[rownames(y)[Descendants(tree, fpO[1])[[1]]],]
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[1])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+# ## True Counts
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000492561.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000216034.5, color=factor(cond))) + geom_point(), common.legend=T)
+# assays(y)[["counts"]][rownames(y)[Descendants(tree, fpO[1])[[1]]],]
+
+## Estimated Counts
+par(mfrow=c(1,2)) 
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[1])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[1])[[1]][2])
+plotInfReps(yAll, "condition", idx=fpO[i])
+sapply(dfA, function(df) df[rownames(y)[Descendants(tree, fpO[1])[[1]]][1],])
+```
+Underestimating uncertainty/counts w.r.t condition 2
+
+```{r}
+i=2
+print(mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),])
+dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000616261.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000373477.8, color=factor(cond))) + geom_point(), common.legend=T)
+par(mfrow=c(1,2)) 
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+```
+
+```{r}
+i=3
+mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),]
+dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]
+df <- data.frame(cbind(t(dfC[rownames(y)[Descendants(tree, fpO[i])[[1]]],]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000503215.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000281142.9, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000502495.1, color=factor(cond))) + geom_point(),
+          common.legend=T)
+
+par(mfrow=c(1,3)) 
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][3])
+```
+
+```{r}
+i=10
+print(mcols(yAll)[c(fpO[i], Descendants(tree, fpO[i])[[1]]),])
+df <- data.frame(cbind(t(aggTC[c(fpO[[i]], Descendants(tree, fpO[i])[[1]]),]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000483206.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000372850.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000372847.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000470840.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000372853.8, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000452446.2, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000609303.1, color=factor(cond))) + geom_point(),
+          common.legend=T)
+par(mfrow=c(3,3))
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][3])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][4])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][5])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][6])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][7])
+plotInfReps(yAll, "condition", idx=fpO[i])
+# p <- ggplot(df, aes(rep, X152020, color=factor(cond))) + geom_point()
+# dev.off()
+plotInfReps(yAll, "condition", idx=fpO[i])
+# p
+
+```
+
+```{r}
+i=18
+print(mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),])
+df <- data.frame(cbind(t(aggTC[c(fpO[[i]], Descendants(tree, fpO[i])[[1]]),]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000428261.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000442631.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000424090.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000420739.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000441980.6, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000415443.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000447324.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000451925.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000479860.1, color=factor(cond))) + geom_point(),
+          common.legend=T)
+
+par(mfrow=c(3,3))
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][3])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][4])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][5])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][6])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][7])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][8])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][9])
+# dev.off()
+# p <- ggplot(df, aes(rep, X173465, color=factor(cond))) + geom_point()
+plotInfReps(yAll, "condition", idx=fpO[i])
+```
+
+```{r}
+i <- 24
+print(mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),])
+df <- data.frame(cbind(t(aggTC[c(fpO[[i]], Descendants(tree, fpO[i])[[1]]),]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000527634.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000532727.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000360962.8, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000540737.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000525908.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000525449.6, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000532565.6, color=factor(cond))) + geom_point(),
+          common.legend=T)
+
+par(mfrow=c(3,3))
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][3])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][4])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][5])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][6])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][7])
+
+# dev.off()
+# p <- ggplot(df, aes(rep, X161648, color=factor(cond))) + geom_point()
+plotInfReps(yAll, "condition", idx=fpO[i])
+```
+
+```{r}
+i <- 27
+print(mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),])
+df <- data.frame(cbind(t(aggTC[c(fpO[[i]], Descendants(tree, fpO[i])[[1]]),]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000475084.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000477194.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000483132.1, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000485803.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000373016.3, color=factor(cond))) + geom_point(),
+          common.legend=T)
+
+par(mfrow=c(2,3))
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][3])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][4])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][5])
+
+# dev.off()
+# p <- ggplot(df, aes(rep, X159107, color=factor(cond))) + geom_point()
+plotInfReps(yAll, "condition", idx=fpO[i])
+```
+
+```{r}
+i <- 35
+print(mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),])
+df <- data.frame(cbind(t(aggTC[c(fpO[[i]], Descendants(tree, fpO[i])[[1]]),]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000460472.6, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000342175.11, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000359218.10, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000591111.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000615779.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000342992.10, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000589042.5, color=factor(cond))) + geom_point(),
+          common.legend=T)
+
+par(mfrow=c(3,3))
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][3])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][4])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][5])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][6])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][7])
+
+# dev.off()
+# p <- ggplot(df, aes(rep, X159107, color=factor(cond))) + geom_point()
+plotInfReps(yAll, "condition", idx=fpO[i])
+```
+
+```{r}
+i <- 36
+print(mcols(yAll)[c(fpO[i],Descendants(tree, fpO[i])[[1]]),])
+df <- data.frame(cbind(t(aggTC[c(fpO[[i]], Descendants(tree, fpO[i])[[1]]),]), rep=colnames(y), cond=rep(c(1,2),each=6)))
+
+ggarrange(ggplot(df, aes(fct_inorder(rep), ENST00000406395.5, color=factor(cond))) + geom_point(),
+          ggplot(df, aes(fct_inorder(rep), ENST00000438754.6, color=factor(cond))) + geom_point(),
+          common.legend=T)
+
+par(mfrow=c(1,2))
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][1])
+plotInfReps(y, "condition", idx=Descendants(tree, fpO[i])[[1]][2])
+
+#dev.off()
+#p <- ggplot(df, aes(rep, X212290, color=factor(cond))) + geom_point()
+plotInfReps(yAll, "condition", idx=fpO[i])
+```
+
+```{r}
+iNodes <- (nrow(y)+1):nrow(yAll)
+desc <- Descendants(tree, iNodes)
+#iNullNodes <- which(sapply(desc, function(nodes) sum(mcols(yAll)[["qvalue"]][nodes] > 0.1, na.rm=T) + sum(is.na(mcols(yAll)[["qvalue"]][nodes]))==length(nodes)))
+iNullNodes <- which(sapply(desc, function(nodes) sum(rownames(y)[nodes] %in% dtus) == 0))
+
+iNullNodes <- iNodes[iNullNodes]
+sum(mcols(yAll)[iNullNodes,"qvalue"] < 0.1, na.rm=T)
+iNull <- iNullNodes[-which(mcols(yAll)[iNullNodes,"qvalue"] <= 0.1)]
+```
+
+```{r}
+tps <- lapply(Descendants(tree, fps[[3]]), function(t) rownames(y)[t])
+save(tps, file = "environment/brain_sim/final1_NA/tps.RData")
+load("environment/brain_sim/bootstrap/txps.RData")
+inds <- sapply(tps, function(txp) {
+  for(i in seq_along(txps)) {
+    if(length(intersect(txp, txps[[i]])) > 0)
+    {
+      return(i)
+      break()
+    }
+  }
+  return(-1)
+})
+```
+
+```{r}
+remTxps <- tps[inds==-1]
+```
+
+```{r}
+inds <- sapply(txps, function(txp) {
+  for(i in seq_along(tps)) {
+    if(length(intersect(txp, tps[[i]])) > 0)
+    {
+      return(i)
+      break()
+    }
+  }
+  return(-1)
+})
+remTxps <- txps[inds==-1]
+```
