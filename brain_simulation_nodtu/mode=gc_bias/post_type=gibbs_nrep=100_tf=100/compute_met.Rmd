@@ -1,0 +1,264 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/simulate.rda")
+
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalueNoStop.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_NoSign.RData")
+```
+
+```{r}
+signs <- computeSign(yAll, "condition")
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+dts <- setdiff(dts, dts[which(abs(logFCNodes[dts]) <= rootFC)])
+
+print(mean(abs(logFCNodes[dts]) > rootFC))
+```
+
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) ta[["candNodeO"]])
+
+inds <- lapply(tAfterQvalue, function(ta) ta[["resDf"]][,"inds"])
+detNodes[["tAfterqvalAllNodes"]] <- lapply(seq(3), function(i) inds[[i]][mcols(yAll)[inds[[i]],"qvalue"] <= c(0.01,0.05,0.1)[i]])
+
+nodes <- lapply(tAfterQvalue, function(ta) c(ta[["naNodeO"]], ta[["candNodeO"]], ta[["negNodeO"]]))
+qvalues <- lapply(nodes, function(node) p.adjust(mcols(yAll)[node,"pvalue"], method="BH"))
+detNodes[["tAfterqvalOnlyNodes"]] <- lapply(seq_along(qvalues), function(i) nodes[[i]][which(qvalues[[i]] <= c(0.01,0.05,0.1)[i])])
+```
+
+```{r}
+innNodesE <- detNodes[["tAfterqval"]][[3]][detNodes[["tAfterqval"]][[3]] > nrow(y)]
+posNodes <- innNodesE[which(abs(logFCNodes)[innNodesE] > rootFC)]
+table(sapply(posNodes,length))
+gDiff <- setdiff(unique(rowData(y)[,1]), c(dge.genes, dte.genes))
+innG <- sapply(Descendants(tree,posNodes), function(nodes) mapDf[rownames(y)[nodes],1])
+table(sapply(innG, length)) ## Number of descendant leaves in each node
+table(sapply(innG, function(g) length(unique(g)))) ### Number of genes associated with each node
+print(length(unique(unlist(innG)))) ### Total number of unique genes
+print(sum(unique(unlist(innG)) %in% dte.genes)) ### unique genes in dte
+print(sum(unique(unlist(innG)) %in% dge.genes))
+
+
+
+test <- abs(mcols(yAll)[innNodesE, "stat"])
+fp <- rep(1, length(test))
+fp[which(abs(logFCNodes)[innNodesE] < rootFC)] = 2
+fp <- fp[order(test, decreasing = T)]
+test <- sort(test, decreasing = T)
+plot(test, col=fp, cex=1.5, pch=20)
+
+innNodesE <- detNodes[["tAfterqvalOnlyNodes"]][[3]][detNodes[["tAfterqvalOnlyNodes"]][[3]] > nrow(y)]
+test <- abs(mcols(yAll)[innNodesE, "stat"])
+fp <- rep(1, length(test))
+fp[which(abs(logFCNodes)[innNodesE] < rootFC)] = 2
+fp <- fp[order(test, decreasing = T)]
+test <- sort(test, decreasing = T)
+plot(test, col=fp, cex=1.5, pch=20)
+```
+
+```{r}
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+negNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalAllNodes"]] <- lapply(detNodes[["tAfterqvalAllNodes"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+negNodes[["tAfterqvalOnlyNodes"]] <- lapply(detNodes[["tAfterqvalOnlyNodes"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    print(n)
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+
+```
+
+```{r}
+print(sum(detNodes[[2]][[3]] > nrow(y)))
+innNodes <- detNodes[[2]][[3]][detNodes[[2]][[3]] > nrow(y)]
+sum(abs(logFCNodes[innNodes]) < rootFC)
+```
+A total of 230 inner nodes detected, out of which 78 are false positives
+
+```{r}
+ngNodes <- c(tAfterQvalue[[3]][["naNodeO"]], tAfterQvalue[[3]][["negNodeO"]])
+ngNodes <- ngNodes[order(mcols(yAll)[ngNodes, 'meanInfRV'], decreasing = T)]
+tpNodes <- match(names(logFCNodes)[abs(logFCNodes) > rootFC], rownames(yAll))
+tnNodes <- match(names(logFCNodes)[abs(logFCNodes) < rootFC], rownames(yAll))
+tns <- intersect(tnNodes, unlist(Descendants(tree,ngNodes)))
+fns <- intersect(tpNodes, ngNodes)
+fns <- fns[order(mcols(yAll)[fns, 'meanInfRV'], decreasing = T)]
+fnsL <- fns[fns < nrow(y)]
+print(length(fnsL))
+
+pmatch <- fnsL[which(mcols(yAll)[["pvalue"]][fnsL] < tAfterQvalue[[3]][["pChild"]])] ##All leaves that have pvalue less than threshold
+sum(tAfterQvalue[[3]][["resDf"]][match(pmatch, tAfterQvalue[[3]][["resDf"]][,3]),2] > 0.1)
+```
+141 missed due to multi hypothesis correction
+
+```{r}
+fnsL <- setdiff(fnsL, pmatch)
+lNodes <- fnsL[sapply(Ancestors(tree, fnsL), function(x) x[1] == (nrow(y)+1))]
+print(length(lNodes))
+```
+388 transcripts have root as their direct ancestor
+
+```{r}
+fnsL <- setdiff(fnsL, lNodes)
+oppNodes <- fnsL[sapply(fnsL, function(node) {
+  sig <- signs[Descendants(tree, Ancestors(tree, node)[1])[[1]]]
+  if(all(sig >= 0, na.rm=T) | all(sig <= 0, na.rm=T))
+      return(F)
+  return(T)
+})]
+print(length(oppNodes))
+anc <- Ancestors(tree, oppNodes)
+oppAnc <- oppNodes[sapply(anc, function(nodes) sum(mcols(yAll)[nodes,"pvalue"] < tAfterQvalue[[3]][["pChild"]]) > 0)]
+print(length(oppAnc))
+SibO <- Siblings(tree, oppNodes)
+
+i <- 1
+print(mcols(yAll)[c(oppNodes[i],Descendants(tree,SibO[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,SibO[[i]])[1],])
+
+i <- 10
+print(mcols(yAll)[c(oppNodes[i],Descendants(tree,SibO[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,oppNodes[[i]])[1],])
+
+i <- 100
+print(mcols(yAll)[c(oppNodes[i],Descendants(tree,SibO[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,oppNodes[i])[1],])
+
+
+```
+345 transcripts that had siblings with opposite signs, out of these 94 have ancestors that have significant pvalues
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+
+i <- 1
+df1 <- getTrace(yAll, c(oppNodes[i], SibO[[i]], Ancestors(tree, oppNodes[i])[1]), 1)
+df2 <- getTrace(yAll, c(oppNodes[i], SibO[[i]], Ancestors(tree, oppNodes[i])[1]), 2)
+
+p1 <- df1 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+p2 <- df2 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+ggarrange(p1, p2, common.legend=T)
+
+i <- 10
+df1 <- getTrace(yAll, c(oppNodes[i], SibO[[i]], Ancestors(tree, oppNodes[i])[1]), 1)
+df2 <- getTrace(yAll, c(oppNodes[i], SibO[[i]], Ancestors(tree, oppNodes[i])[1]), 2)
+
+p1 <- df1 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+p2 <- df2 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+ggarrange(p1, p2, common.legend=T)
+
+i <- 100
+df1 <- getTrace(yAll, c(oppNodes[i], SibO[[i]], Ancestors(tree, oppNodes[i])[1]), 1)
+df2 <- getTrace(yAll, c(oppNodes[i], SibO[[i]], Ancestors(tree, oppNodes[i])[1]), 2)
+
+p1 <- df1 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+p2 <- df2 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+ggarrange(p1, p2, common.legend=T)
+
+i <- 1
+df1 <- getTrace(yAll, c(oppAnc[i], Siblings(tree, oppAnc[i])[[1]], Ancestors(tree, oppAnc[i])[1]), 1)
+df2 <- getTrace(yAll, c(oppAnc[i], Siblings(tree, oppAnc[i])[[1]], Ancestors(tree, oppAnc[i])[1]), 2)
+
+p1 <- df1 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+p2 <- df2 %>% ggplot(aes(infRep, count, col=factor(feature))) + geom_point() + geom_line()
+ggarrange(p1, p2, common.legend=T)
+```
+
+```{r}
+fnsL <- setdiff(fnsL, oppNodes)
+Sibs <- Siblings(tree, fnsL)
+sibFN <- fnsL[which(sapply(Sibs, function(sib) sum(mcols(yAll)[c(sib,unlist(Descendants(tree,sib,"all"))),"pvalue"] < tAfterQvalue[[3]][["pChild"]], na.rm=T) > 0))]
+print(length(sibFN))
+
+i <- 1
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 10
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 20
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 30
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 100
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 200
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 400
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 600
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+
+i <- 800
+print(mcols(yAll)[c(sibFN[i],Descendants(tree,Sibs[[i]])[[1]]),])
+print(mcols(yAll)[Ancestors(tree,Sibs[[i]])[1],])
+```
+919 have siblings or either their descendants that have significant pvalue
+
+```{r}
+fnsL <- setdiff(fnsL, sibFN)
+fnInf <- fnsL[sapply(fnsL, function(node) sum(mcols(yAll)[c(Siblings(tree, node), node),"meanInfRV"] < 0.3) > 0)]
+fnsL <- setdiff(fnsL, fnInf)
+```
+215 nodes dont climb because of infRV criteria
+
+For the remaining 3 nodes, descendants of siblings had already been looked
+
+Look at ancestor nodes for oppNodes
