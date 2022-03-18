@@ -30,122 +30,122 @@ read_fasta_file=join(read_path, "{rep}", "sample_0{cond}_{read}.fasta")
 read_fasta_file_rgen=join(read_path, "{{rep}}", "sample_0{cond}_{read}.fasta")
 read_fasta_file_sal=join(read_path, "{{rep}}", "sample_0{{cond}}_{read}.fasta")
 
-# nrep=config["nreplicates"] ##number of posterior samples
-# tf=16
+nrep=config["nreplicates"] ##number of posterior samples
+tf=16
 
-# post_dir=join(exp_gc_mode, "post_type={}_nrep={}").format(post_type, nrep)
-# if(post_type=="gibbs"):
-#     tf=config["thinning_factor"]
-#     post_dir=join(exp_gc_mode, "post_type={}_nrep={}_tf={}").format(post_type, nrep, tf) ##thinning factor additional for gibbs
+post_dir=join(exp_gc_mode, "post_type={}_nrep={}").format(post_type, nrep)
+if(post_type=="gibbs"):
+    tf=config["thinning_factor"]
+    post_dir=join(exp_gc_mode, "post_type={}_nrep={}_tf={}").format(post_type, nrep, tf) ##thinning factor additional for gibbs
 # #else:
 
-# out_sal_dir=join(post_dir, config['out_sal_path'])
-# out_sal_quant=join(out_sal_dir, "{rep}_{cond}", "quant.sf")
+out_sal_dir=join(post_dir, config['out_sal_path'])
+out_sal_quant=join(out_sal_dir, "{rep}_{cond}", "quant.sf")
 
-# txp_ref = join(exp_dir, config["txp_fasta"])
-# if config['txp_fasta'].startswith("/"):
-#     txp_ref = config['txp_fasta']
-# sal_ind_path = join(exp_dir, config["sal_ind_path"])
-# if config['sal_ind_path'].startswith("/"):
-#     sal_ind_path = config["sal_ind_path"]
+txp_ref = join(exp_dir, config["txp_fasta"])
+if config['txp_fasta'].startswith("/"):
+    txp_ref = config['txp_fasta']
+sal_ind_path = join(exp_dir, config["sal_ind_path"])
+if config['sal_ind_path'].startswith("/"):
+    sal_ind_path = config["sal_ind_path"]
 
-# read_fasta_file_pe1 = read_fasta_file_sal.format(read=1)
-# read_fasta_file_pe2 = read_fasta_file_sal.format(read=2)
+read_fasta_file_pe1 = read_fasta_file_sal.format(read=1)
+read_fasta_file_pe2 = read_fasta_file_sal.format(read=2)
 
-# term_out_dir = join(post_dir, config['out_term_path'])
-# term_group = join(term_out_dir, "{rep}_{cond}/groups.txt")
-# clust_nwk = join(term_out_dir, 'cluster_nwk.txt')
+term_out_dir = join(post_dir, config['out_term_path'])
+term_group = join(term_out_dir, "{rep}_{cond}/groups.txt")
+clust_nwk = join(term_out_dir, 'cluster_nwk.txt')
 # rule all:
 #     #input:expand(config["read_path"] + "/{rep}/sample_0{cond}_{read}.fasta", rep=REPLICATES, cond=[1,2], read=[1,2])
 #     input:expand(out_sal_quant, rep=REPLICATES, cond=[1,2])
 #     params:
 #         partition = get_partition('all')
 
-# rule run_terminus:
-#     input:clust_nwk
-#         #p1 = expand(config['out_term'] + "/{run}/groups.txt", run=up_runs),
-#     params:
-#         partition = get_partition('run_terminus')
+rule run_terminus:
+    input:clust_nwk
+        #p1 = expand(config['out_term'] + "/{run}/groups.txt", run=up_runs),
+    params:
+        partition = get_partition('run_terminus')
 
-# rule run_term_collapse:
-#     input:
-#         expand(term_group, rep=REPLICATES, cond=[1,2])
-#     output:
-#         clust_nwk
-#     params:
-#         term_path = config["term_path"],
-#         input = out_sal_dir,
-#         output = term_out_dir,
-#         partition = get_partition('run_term_collapse')
-#     shell:
-#         """
-#             cd {params.term_path}
-#             target/release/terminus collapse -c 0 -d {params.input} -o {params.output} -m true --merge_type phylip
-#             cd -
-#         """
+rule run_term_collapse:
+    input:
+        expand(term_group, rep=REPLICATES, cond=[1,2])
+    output:
+        clust_nwk
+    params:
+        term_path = config["term_path"],
+        input = out_sal_dir,
+        output = term_out_dir,
+        partition = get_partition('run_term_collapse')
+    shell:
+        """
+            cd {params.term_path}
+            target/release/terminus collapse -c 0 -d {params.input} -o {params.output} -m true --merge_type phylip
+            cd -
+        """
 
-# rule run_term_group:
-#     input:
-#         out_sal_quant
-#     output:
-#         term_group
-#     params:
-#         term_path=config["term_path"] + "/target/release/terminus",
-#         partition = get_partition('run_term_group'),
-#         output = term_out_dir,
-#         input = join(out_sal_dir,  "{rep}_{cond}")
-#     shell:
-#         "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output}  --thr false"
+rule run_term_group:
+    input:
+        out_sal_quant
+    output:
+        term_group
+    params:
+        term_path=config["term_path"] + "/target/release/terminus",
+        partition = get_partition('run_term_group'),
+        output = term_out_dir,
+        input = join(out_sal_dir,  "{rep}_{cond}")
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output}  --thr false"
 
 
-# rule run_salmon:
-#     input:
-#         inp_fastq1 = read_fasta_file_pe1,
-#         inp_fastq2 = read_fasta_file_pe2,
-#         index = join(sal_ind_path, "pos.bin")
-#     output:
-#         out_sal_quant
-#     resources: cpus=10, mem=32000
-#     params:
-#         out_dir = join(out_sal_dir, "{rep}_{cond}"),
-#         partition = get_partition('run_salmon'),
-#         sal_path = config['sal_path'],
-#         sal_ind = sal_ind_path,
-#         nrep = nrep,
-#         tf = tf
-#     run:
-#         if post_type == "gibbs":
-#             if gc_bias:
-#                 shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
-#                 --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
-#                 -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
-#             else:
-#                 shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} \
-#                 --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
-#                 -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+rule run_salmon:
+    input:
+        inp_fastq1 = read_fasta_file_pe1,
+        inp_fastq2 = read_fasta_file_pe2,
+        index = join(sal_ind_path, "pos.bin")
+    output:
+        out_sal_quant
+    resources: cpus=10, mem=32000
+    params:
+        out_dir = join(out_sal_dir, "{rep}_{cond}"),
+        partition = get_partition('run_salmon'),
+        sal_path = config['sal_path'],
+        sal_ind = sal_ind_path,
+        nrep = nrep,
+        tf = tf
+    run:
+        if post_type == "gibbs":
+            if gc_bias:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
+                --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+            else:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} \
+                --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
             
-#         else:
-#             if gc_bias:
-#                 shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
-#                 --numBootstraps {params.nrep} -d \
-#                 -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
-#             else:
-#                 shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} \
-#                 --numBootstraps {params.nrep} -d \
-#                 -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+        else:
+            if gc_bias:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
+                --numBootstraps {params.nrep} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+            else:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} \
+                --numBootstraps {params.nrep} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
 
-# # rule build_sal_ind:
-# #     input:txp_ref
-# #     output:join(sal_ind_path, "pos.bin")
-# #     params:
-# #         out_ind_path = sal_ind_path,
-# #         partition = get_partition('build_sal_ind'),
-# #         sal_path = config['sal_path']
-# #     resources:cpus=10, mem=32000
-# #     shell:
-# #         """
-# #            {params.sal_path} index --keepDuplicates -p {resources.cpus} -t {input} -i {params.out_ind_path}
-# #         """
+# rule build_sal_ind:
+#     input:txp_ref
+#     output:join(sal_ind_path, "pos.bin")
+#     params:
+#         out_ind_path = sal_ind_path,
+#         partition = get_partition('build_sal_ind'),
+#         sal_path = config['sal_path']
+#     resources:cpus=10, mem=32000
+#     shell:
+#         """
+#            {params.sal_path} index --keepDuplicates -p {resources.cpus} -t {input} -i {params.out_ind_path}
+#         """
 
 rule all_reads:
     input:expand(read_fasta_file, rep=REPLICATES, cond=[1,2], read=[1,2])
