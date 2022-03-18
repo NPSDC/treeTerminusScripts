@@ -1,0 +1,38 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+```
+
+#### Distribution of signs and levels
+```{r}
+minInfRV <- 0.20
+nLeaf <- length(tree$tip)
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+```{r}
+print(system.time(tAfterQvalue <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)))
+save(tAfterQvalue, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
+```

@@ -1,0 +1,121 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu_lowfc/simulate.rda")
+
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalueNoStop.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_NoSign.RData")
+```
+
+```{r}
+signs <- computeSign(yAll, "condition")
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+dts <- setdiff(dts, dts[which(abs(logFCNodes[dts]) <= rootFC)])
+
+print(mean(abs(logFCNodes[dts]) > rootFC))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) ta[["candNodeO"]])
+```
+
+```{r}
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+negNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    print(n)
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+
+```
+
+<!-- ```{r} -->
+<!-- negNodes <- c(tAfterQvalue[[3]][["naNodeO"]], tAfterQvalue[[3]][["negNodeO"]]) -->
+<!-- negNodes <- negNodes[order(mcols(yAll)[negNodes, 'meanInfRV'], decreasing = T)] -->
+<!-- tpNodes <- match(names(logFCNodes)[abs(logFCNodes) > rootFC], rownames(yAll)) -->
+<!-- fns <- intersect(tpNodes, negNodes) -->
+<!-- fns <- fns[order(mcols(yAll)[fns, 'meanInfRV'], decreasing = T)] -->
+<!-- fnsL <- fns[fns < nrow(y)] -->
+<!-- print(length(fnsL)) -->
+
+<!-- pmatch <- fnsL[which(mcols(yAll)[["pvalue"]][fnsL] < tAfterQvalue[[3]][["pChild"]])] ##All leaves that have pvalue less than threshold -->
+<!-- sum(tAfterQvalue[[3]][["resDf"]][match(pmatch, tAfterQvalue[[3]][["resDf"]][,3]),2] > 0.1) -->
+<!-- ``` -->
+<!-- 141 missed due to multi hypothesis correction -->
+
+<!-- ```{r} -->
+<!-- fnsL <- setdiff(fnsL, pmatch) -->
+<!-- oppNodes <- fnsL[sapply(fnsL, function(node) { -->
+<!--   sig <- signs[Descendants(tree, Ancestors(tree, node)[1])[[1]]] -->
+<!--   if(all(sig >= 0, na.rm=T) | all(sig <= 0, na.rm=T)) -->
+<!--       return(F) -->
+<!--   return(T) -->
+<!-- })] -->
+<!-- print(length(oppNodes)) -->
+<!-- anc <- Ancestors(tree, oppNodes) -->
+<!-- oppAnc <- oppNodes[sapply(anc, function(nodes) sum(mcols(yAll)[nodes,"pvalue"] < tAfterQvalue[[3]][["pChild"]]) > 0)] -->
+<!-- print(length(oppAnc)) -->
+<!-- ``` -->
+<!-- 733 transcripts that had siblings with opposite signs, out of these 94 have ancestors that have significant pvalues -->
+
+<!-- ```{r} -->
+<!-- fnsL <- setdiff(fnsL, oppNodes) -->
+<!-- Sibs <- Siblings(tree, fnsL) -->
+<!-- sibFN <- fnsL[which(sapply(Sibs, function(sib) sum(mcols(yAll)[c(sib,unlist(Descendants(tree,sib,"all"))),"pvalue"] < tAfterQvalue[[3]][["pChild"]], na.rm=T) > 0))] -->
+<!-- print(length(sibFN)) -->
+<!-- ``` -->
+<!-- 919 have siblings or either their descendants that have significant pvalue -->
+
+<!-- ```{r} -->
+<!-- fnsL <- setdiff(fnsL, sibFN) -->
+<!-- fnInf <- fnsL[sapply(fnsL, function(node) sum(mcols(yAll)[c(Siblings(tree, node), node),"meanInfRV"] < 0.3) > 0)] -->
+<!-- fnsL <- setdiff(fnsL, fnInf) -->
+<!-- ``` -->
+<!-- 215 nodes dont climb because of infRV criteria -->
+
+<!-- For the remaining 3 nodes, descendants of siblings had already been looked -->
+
+<!-- Look at ancestor nodes for oppNodes -->

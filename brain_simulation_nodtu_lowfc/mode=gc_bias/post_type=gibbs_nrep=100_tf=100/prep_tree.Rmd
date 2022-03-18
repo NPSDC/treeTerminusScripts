@@ -1,0 +1,47 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+File that reads quant data for bootstrap on brain simulation and combines it with tree from terminus. Also runs swish on the transcripts and the entire structure of trees.
+
+### Reading data
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_sal"
+samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
+files <- file.path(quantDir, samples, "quant.sf")
+colData <- data.frame(files = files, names = samples, condition = as.factor(rep(c(1,2),each=6)))
+seBrainSim <- tximeta::tximeta(colData)
+txdb <- makeTxDbFromGFF(file="/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation/gencode.v26.annotation.gtf.gz")
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+tInds <- match(rownames(seBrainSim), tx2gene[,"TXNAME"])
+rowData(seBrainSim) <- tx2gene[tInds,c("GENEID", "TXNAME")]
+save(seBrainSim, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/seBrainSim.RData")
+trees <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term/cluster_nwk.txt")
+tLengths <- sapply(trees, function(x) length(x$tip.label))
+tree <- mergeTree(trees, se = seBrainSim)
+```
+
+### Running Swish
+```{r}
+y <- scaleInfReps(seBrainSim)
+y <- labelKeep(y)
+y <- runSwishtree(tree, y, type = "union")
+modOb <- mergeLeaves(tree, y)
+tree <- modOb[["tree"]]
+y <- modOb[["ySwish"]]
+save(y, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+save(tree, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+```
+
+### Swish for all nodes
+```{r}
+yAll <- prepSwish(tree, y)
+yAll <- scaleInfReps(yAll, lengthCorrect = T)
+yAll <- labelKeep(yAll)
+yAll <- swish(yAll, x = "condition")
+yAll <- computeInfRV(yAll)
+hist(mcols(yAll)[["pvalue"]])
+save(yAll, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+```
