@@ -80,6 +80,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, 
         descPVal <- descPVal[setdiff(seq_along(descPVal), descNA)]
         
         if(all(!descPVal)) ## All are non signficant
+        #if(any(!descPVal) | length(descNA) > 0) ## Any node is non significant
         {
             pIRV <- mInfRV[parent]
             cIRV <- mInfRV[children]
@@ -315,6 +316,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
     if(cSign) signs <- computeSign(y, cond, minP = minP) else signs <- NULL
     #print(nonSigLeaves)
     for(n in nonSigLeaves) {
+        #print(paste("i is", n))
         if(nodesLooked[n])
             next()
         curNode <- n
@@ -369,4 +371,74 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
     nodesLooked[!mcols(y)[["keep"]]] <- F
     naNode[unlist(Descendants(tree, sort(c(which(candNode), which(negNode))), "all"))] <- F
     return(list("candNode" = candNode, "negNode" = negNode, "naNode" = naNode, "nodesLooked" = nodesLooked, "pCut" = pCutOff, "pChild" = pChild))
+}
+
+
+meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
+    #print(nInd)
+    if(nInd < length(tree$tip)) {  ## leaf node that is significant
+       if(is.na(mcols(yAll)[nInd,"pvalue"]))
+           return(F)
+       if(mcols(yAll)[nInd,"pvalue"] < pCut) 
+           return(T)
+    }  
+        
+    desc <- unlist(Descendants(tree, nInd,  'all')) ## Inner nodes
+    children <- Descendants(tree, nInd,  'child')
+    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
+        ##IS.NA()
+            if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
+                return(T)
+            if(!all(mcols(yAll)[children,"pvalue"] < pCut)) { ##all children cant be significant
+                return(T)
+        }
+    }
+    return(F)
+}
+
+findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
+    # dNodes <- Descendants(tree, nrow(y)+1, "child")
+    # dNodes <- dNodes[sapply(Descendants(tree, dNodes),length) > 1]
+    # dNodes <- dNodes[sapply(Descendants(tree, dNodes), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)>1)]
+    # 
+    # pNodes <- Descendants(tree, nrow(y)+1, "child")
+    # pNodes <- pNodes[sapply(Descendants(tree, pNodes),length) > 1]
+    # pNodes <- pNodes[sapply(Descendants(tree, pNodes), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)==1)]
+    
+    desc <- unlist(Descendants(tree, ind, "all"))
+    sigNodes <- desc[which(mcols(yAll)[desc,"pvalue"] < pCut)]
+    if(mcols(yAll)[ind,"pvalue"] < pCut & ind > length(tree$tip))
+        sigNodes <- c(ind, sigNodes)
+    if(length(sigNodes) == 0)
+        return(-1)
+    # names(mSigNodes) <- sigNodes
+    sigInn <- sort(sigNodes[sigNodes > nrow(y)])
+    if(length(sigInn) == 0)
+        return(sigNodes)
+    sigCons <- c() ##sigNodes that are non overlapping
+    sigLeft <- sigInn
+    #descSig <- Descendants(tree, sigInn, "all")
+    #print(paste("sigLeft", sigLeft))
+    while(length(sigLeft) > 0) {
+        sigCons <- c(sigCons, sigLeft[1])
+        sigLeft <- setdiff(sigLeft, c(sigLeft[1],unlist(Descendants(tree,sigLeft[1], "all"))))
+    }
+    sigCondD <- unlist(Descendants(tree, sigCons,"all"))
+    sigCons <- c(sigCons, setdiff(sigNodes,c(sigCons,sigCondD)))
+    print(sigNodes)
+    print(sigCons)
+    nodes <- lapply(sigCons, function(ind) findTNode(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs))
+    return(nodes)
+}
+
+findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
+    if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
+        return(ind)
+    if(length(intersect(unlist(Descendants(tree, ind)), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
+        return(c())
+    children <- Descendants(tree, ind, "child")
+    nodes <- c()
+    for(child in children)
+        nodes <- c(nodes,findTNode(yAll, tree, child, sigNodes, pCut, mIRVCut, signs))
+    return(nodes)
 }
