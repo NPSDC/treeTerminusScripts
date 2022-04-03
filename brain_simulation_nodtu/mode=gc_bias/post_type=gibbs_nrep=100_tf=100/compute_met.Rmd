@@ -70,8 +70,8 @@ table(sapply(innG, function(g) length(unique(g)))) ### Number of genes associate
 print(length(unique(unlist(innG)))) ### Total number of unique genes
 print(sum(unique(unlist(innG)) %in% dte.genes)) ### unique genes in dte
 print(sum(unique(unlist(innG)) %in% dge.genes))
-
-
+missG <- unique(unlist(innG))[unique(unlist(innG)) %in% gDiff] ## genes with inner nodes that neither dte or dge
+which(sapply(innG, function(x) sum(x %in% missG)>0))
 
 test <- abs(mcols(yAll)[innNodesE, "stat"])
 fp <- rep(1, length(test))
@@ -212,6 +212,7 @@ ggarrange(p1, p2, common.legend=T)
 fnsL <- setdiff(fnsL, oppNodes)
 Sibs <- Siblings(tree, fnsL)
 sibFN <- fnsL[which(sapply(Sibs, function(sib) sum(mcols(yAll)[c(sib,unlist(Descendants(tree,sib,"all"))),"pvalue"] < tAfterQvalue[[3]][["pChild"]], na.rm=T) > 0))]
+Sibs <- Sibs[match(sibFN, fnsL)]
 print(length(sibFN))
 
 i <- 1

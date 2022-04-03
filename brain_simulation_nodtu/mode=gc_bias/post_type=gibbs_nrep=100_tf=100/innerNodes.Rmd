@@ -1,0 +1,325 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/simulate.rda")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalueNoStop.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_NoSign.RData")
+```
+
+```{r}
+signs <- computeSign(yAll, "condition")
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+dts <- setdiff(dts, dts[which(abs(logFCNodes[dts]) <= rootFC)])
+
+print(mean(abs(logFCNodes[dts]) > rootFC))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) ta[["candNodeO"]])
+
+inds <- lapply(tAfterQvalue, function(ta) ta[["resDf"]][,"inds"])
+detNodes[["tAfterqvalAllNodes"]] <- lapply(seq(3), function(i) inds[[i]][mcols(yAll)[inds[[i]],"qvalue"] <= c(0.01,0.05,0.1)[i]])
+
+nodes <- lapply(tAfterQvalue, function(ta) c(ta[["naNodeO"]], ta[["candNodeO"]], ta[["negNodeO"]]))
+qvalues <- lapply(nodes, function(node) p.adjust(mcols(yAll)[node,"pvalue"], method="BH"))
+detNodes[["tAfterqvalOnlyNodes"]] <- lapply(seq_along(qvalues), function(i) nodes[[i]][which(qvalues[[i]] <= c(0.01,0.05,0.1)[i])])
+```
+
+```{r}
+innNodesE <- detNodes[["tAfterqval"]][[3]][detNodes[["tAfterqval"]][[3]] > nrow(y)]
+tpNodes <- innNodesE[which(abs(logFCNodes)[innNodesE] > rootFC)]
+desc <- Descendants(tree, tpNodes)
+largerNodes <- which(sapply(seq_along(desc), function(i) abs(mcols(yAll)[tpNodes[i],"log2FC"]) > max(abs(ifelse(is.na(mcols(yAll)[desc[[i]],"log2FC"]),0,mcols(yAll)[desc[[i]],"log2FC"])), na.rm = T)))
+
+largerNodes <- largerNodes[order(abs(mcols(yAll)[tpNodes[largerNodes],"log2FC"]) - sapply(desc[largerNodes], function(nodes) max(abs(ifelse(is.na(mcols(yAll)[nodes,"log2FC"]),0,mcols(yAll)[nodes,"log2FC"])), na.rm = T)), decreasing=T)]
+
+fpNodes <- innNodesE[which(abs(logFCNodes)[innNodesE] < rootFC)]
+print(table(sapply(Descendants(tree,tpNodes),length))) ### Distribution of total number of leaves   
+gDiff <- setdiff(unique(rowData(y)[,1]), c(dge.genes, dte.genes))
+
+innG <- sapply(Descendants(tree,tpNodes), function(nodes) mapDf[rownames(y)[nodes],1])
+table(sapply(innG, function(g) length(unique(g)))) ### Number of genes associated with each node
+
+print(length(unique(unlist(innG)))) ### Total number of unique genes
+print(sum(unique(unlist(innG)) %in% dte.genes)) ### unique genes in dte
+print(sum(unique(unlist(innG)) %in% dge.genes)) ### unique genes in dge
+print(sum(unique(unlist(innG)) %in% gDiff)) ### genes that are neither dte or dge
+```
+some of these are paralogs
+
+### Example of True Positive Inner Nodes
+#### Gene UGP2
+```{r}
+print(mcols(yAll)[tpNodes[sapply(innG, length) == 12],])
+print(as.data.frame(mcols(yAll)[intersect(Descendants(tree,tpNodes[sapply(innG, length) == 12])[[1]],which(mcols(yAll)[["keep"]])),]))
+print(unique(innG[sapply(innG, length) == 12][[1]]))
+tr <- read.tree(text="((((21018:12.0,21017:12.0):2.00,21004:12.0,21007:12.0,(((20988:12.0,21012:12.0):2.00,
+20999:12.0):4.00,21010:12.0):2.00,(20993:12.0,20996:12.0):2.00,(20997:12.0,20995:12.0):2.00):1.00,
+(((21009:12.0,(21014:12.0,21003:12.0):1.00):2.00,(21013:12.0,(20992:12.0,20998:12.0):6.00):2.00):1.00,
+20990:12.0):1.00):1.00,(((21008:12.0,(20987:12.0,21015:12.0):10.0):9.00,20991:12.0):4.00,
+21000:12.0):3.00,((20989:12.0,21006:12.0):4.00,21005:12.0):2.00,21002:12.0,(21001:12.0,
+21011:12.0):4.00,20994:12.0,21016:12.0);")
+plot(tr)
+par(mfrow=c(3,2))
+for(j in seq(6))
+    plotInfReps(y=yAll, idx=Descendants(tree,tpNodes[sapply(innG, length) == 12])[[1]][j], x="condition")
+dev.off()
+par(mfrow=c(3,2))
+for(j in c(7:12))
+    plotInfReps(y=yAll, idx=Descendants(tree,tpNodes[sapply(innG, length) == 12])[[1]][j], x="condition")
+dev.off()
+```
+
+```{r}
+plotInfReps(y=yAll, idx=tpNodes[sapply(innG, length) == 12], x="condition")
+```
+Tree containing 21018
+
+#### Gene ZC4H2
+```{r}
+print(mcols(yAll)[tpNodes[sapply(innG, length) == 6],])
+print(as.data.frame(mcols(yAll)[intersect(Descendants(tree,tpNodes[sapply(innG, length) == 6])[[1]],which(mcols(yAll)[["keep"]])),]))
+print(unique(innG[sapply(innG, length) == 6][[1]]))
+tr <- read.tree(text="(((((194784:12.0,194782:12.0):5.00,194783:12.0):2.00,194779:12.0):2.00,(194785:12.0,
+194786:12.0):4.00):4.00,(194780:12.0,194781:12.0):12.0);")
+plot(tr)
+par(mfrow=c(3,2))
+for(i in seq(6))
+    plotInfReps(y=yAll, idx=Descendants(tree,tpNodes[sapply(innG, length) == 6])[[1]][i], x="condition")
+dev.off()
+```
+```{r}
+plotInfReps(y=yAll, idx=tpNodes[sapply(innG, length) == 6], x="condition")
+```
+Tree containing 194784
+
+#### YIPF1 Gene
+```{r}
+i <- 1
+print(mcols(yAll)[tpNodes[sapply(innG, length) == 4][i],])
+print(as.data.frame(mcols(yAll)[intersect(Descendants(tree,tpNodes[sapply(innG, length) == 4][i])[[1]],which(mcols(yAll)[["keep"]])),]))
+par(mfrow=c(2,2))
+for(j in seq(4))
+    plotInfReps(y=yAll, idx=Descendants(tree,tpNodes[sapply(innG, length) == 4][i])[[1]][j], x="condition")
+dev.off()
+```
+```{r}
+plotInfReps(y=yAll, idx=tpNodes[sapply(innG, length) == 4][i], x="condition")
+print(rownames(y)[Descendants(tree,tpNodes[sapply(innG, length) == 4])[[1]]])
+tr <- read.tree(text="(6077:12.0,(6078:12.0,(6079:12.0,6080:12.0):12.0):8.00);")
+plot(tr)
+```
+
+#### SCRN gene
+```{r}
+i <- 2
+print(mcols(yAll)[tpNodes[sapply(innG, length) == 4][i],])
+print(as.data.frame(mcols(yAll)[intersect(Descendants(tree,tpNodes[sapply(innG, length) == 4][i])[[1]],which(mcols(yAll)[["keep"]])),]))
+par(mfrow=c(2,2))
+for(j in seq(4))
+    plotInfReps(y=yAll, idx=Descendants(tree,tpNodes[sapply(innG, length) == 4][i])[[1]][j], x="condition")
+dev.off()
+```
+
+```{r}
+plotInfReps(y=yAll, idx=tpNodes[sapply(innG, length) == 4][i], x="condition")
+tr <- read.tree(text="(((27196:12.0,(27198:12.0,27197:12.0):10.0):2.00,(27191:12.0,27193:12.0):10.0,
+((27192:12.0,27194:12.0):5.00,((27195:12.0,27187:12.0):5.00,(27186:12.0,27185:12.0):7.00):2.00):1.00):1.00,
+((27189:12.0,27190:12.0):5.00,27188:12.0):3.00);")
+plot(tr)
+print(rownames(y)[Descendants(tree,tpNodes[sapply(innG, length) == 4])[[1]]])
+##27195
+```
+
+##### Nodes with increased LFCs
+```{r}
+i <- 1
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 2
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 3
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 4
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 5
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 7
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 8
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+
+i <- 11
+print(mcols(yAll)[tpNodes[largerNodes][i],])
+print(mcols(yAll)[desc[[largerNodes[i]]],])
+par(mfrow=c(2,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[largerNodes[i]]][j], x="condition")
+plotInfReps(y=yAll, idx=tpNodes[largerNodes[i]], x="condition")
+dev.off()
+```
+
+
+```{r}
+i <- 2
+print(mcols(yAll)[tpNodes[sapply(innG, length) == 2][i],])
+print(mcols(yAll)[Descendants(tree,tpNodes[sapply(innG, length) == 2][i])[[1]],])
+par(mfrow=c(1,2))
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=Descendants(tree,tpNodes[sapply(innG, length) == 2][i])[[1]][j], x="condition")
+dev.off()
+```
+```{r}
+plotInfReps(y=yAll, idx=tpNodes[sapply(innG, length) == 2][i], x="condition")
+print(rownames(y)[Descendants(tree,tpNodes[sapply(innG, length) == 4])[[1]]])
+```
+
+### False Positive inner nodes
+```{r}
+fpNodes <- innNodesE[which(abs(logFCNodes)[innNodesE] < rootFC)]
+fpNodes <- fpNodes[order(abs(mcols(yAll)[fpNodes, "stat"]), decreasing = T)]
+desc <- Descendants(tree, fpNodes)
+par(mfrow=c(2,2))
+i <- 1
+print(logFCNodes[desc[[i]]])
+for(j in seq(4))
+    plotInfReps(y=yAll, idx=desc[[i]][j], x="condition")
+dev.off()
+```
+
+```{r}
+print(mcols(yAll)[desc[[i]],])
+print(mcols(yAll)[fpNodes[i],])
+plotInfReps(y=yAll, idx=fpNodes[i], x="condition")
+```
+
+```{r}
+par(mfrow=c(2,2))
+i <- 2
+print(logFCNodes[desc[[i]]])
+for(j in seq(3))
+    plotInfReps(y=yAll, idx=desc[[i]][j], x="condition")
+dev.off()
+```
+
+```{r}
+print(mcols(yAll)[desc[[i]],])
+print(mcols(yAll)[fpNodes[i],])
+plotInfReps(y=yAll, idx=fpNodes[i], x="condition")
+```
+
+```{r}
+par(mfrow=c(2,1))
+i <- 3
+print(logFCNodes[desc[[i]]])
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[i]][j], x="condition")
+dev.off()
+```
+
+```{r}
+print(mcols(yAll)[desc[[i]],])
+print(mcols(yAll)[fpNodes[i],])
+plotInfReps(y=yAll, idx=fpNodes[i], x="condition")
+```
+
+```{r}
+par(mfrow=c(2,1))
+i <- 4
+print(logFCNodes[desc[[i]]])
+for(j in seq(2))
+    plotInfReps(y=yAll, idx=desc[[i]][j], x="condition")
+dev.off()
+```
+
+```{r}
+print(mcols(yAll)[desc[[i]],])
+print(mcols(yAll)[fpNodes[i],])
+plotInfReps(y=yAll, idx=fpNodes[i], x="condition")
+```
+
+```{r}
+par(mfrow=c(2,2))
+i <- 5
+print(logFCNodes[desc[[i]]])
+for(j in seq(4))
+    plotInfReps(y=yAll, idx=desc[[i]][j], x="condition")
+dev.off()
+```
+
+```{r}
+print(mcols(yAll)[desc[[i]],])
+print(mcols(yAll)[fpNodes[i],])
+plotInfReps(y=yAll, idx=fpNodes[i], x="condition")
+```

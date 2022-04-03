@@ -1,0 +1,103 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+```
+
+#### Distribution of signs and levels
+```{r}
+minInfRV <- 0.20
+nLeaf <- length(tree$tip)
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+```{r}
+# print(system.time(tAfterQvalue_RelaxClimb <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)))
+# save(tAfterQvalue, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_relax_term.RData")
+```
+
+```{r}
+signs <- computeSign(yAll, "condition")
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+dts <- setdiff(dts, dts[which(abs(logFCNodes[dts]) <= rootFC)])
+
+print(mean(abs(logFCNodes[dts]) > rootFC))
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tARelax.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
+
+ngNodes <- c(tAfterQvalue_RelaxClimb[[1]][["naNodeO"]], tAfterQvalue_RelaxClimb[[1]][["negNodeO"]])
+ngNodes <- ngNodes[order(mcols(yAll)[ngNodes, 'meanInfRV'], decreasing = T)]
+tpNodes <- match(names(logFCNodes)[abs(logFCNodes) > rootFC], rownames(yAll))
+tnNodes <- match(names(logFCNodes)[abs(logFCNodes) < rootFC], rownames(yAll))
+
+tns <- intersect(tnNodes, unlist(Descendants(tree,ngNodes)))
+fns <- intersect(tpNodes, ngNodes)
+fns <- fns[order(mcols(yAll)[fns, 'meanInfRV'], decreasing = T)]
+fnsL <- fns[fns < nrow(y)]
+print(length(fnsL))
+```
+
+```{r}
+pmatch <- fnsL[which(mcols(yAll)[["pvalue"]][fnsL] < tAfterQvalue_RelaxClimb[[1]][["pChild"]])] ##All leaves that have pvalue less than threshold
+sum(tAfterQvalue_RelaxClimb[[1]][["resDf"]][match(pmatch, tAfterQvalue_RelaxClimb[[1]][["resDf"]][,3]),2] > 0.1)
+```
+
+```{r}
+fnsL <- setdiff(fnsL, pmatch)
+lNodes <- fnsL[sapply(Ancestors(tree, fnsL), function(x) x[1] == (nrow(y)+1))]
+print(length(lNodes))
+```
+
+```{r}
+fnsL <- setdiff(fnsL, lNodes)
+oppNodes <- fnsL[sapply(fnsL, function(node) {
+  sig <- signs[Descendants(tree, Ancestors(tree, node)[1])[[1]]]
+  if(all(sig >= 0, na.rm=T) | all(sig <= 0, na.rm=T))
+      return(F)
+  return(T)
+})]
+
+```
+
+```{r}
+fnsL <- setdiff(fnsL, oppNodes)
+Sibs <- Siblings(tree, fnsL)
+sibFN <- fnsL[which(sapply(Sibs, function(sib) sum(mcols(yAll)[c(sib,unlist(Descendants(tree,sib,"all"))),"pvalue"] < tAfterQvalue_RelaxClimb[[1]][["pChild"]], na.rm=T) > 0))]
+Sibs <- Sibs[match(sibFN, fnsL)]
+```
