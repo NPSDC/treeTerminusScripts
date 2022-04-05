@@ -376,6 +376,8 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
 
 meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
     #print(nInd)
+    if(mcols(yAll)[nInd, "pvalue"] > pCut | is.na(mcols(yAll)[nInd, "pvalue"]))
+        return(F)
     if(nInd < length(tree$tip)) {  ## leaf node that is significant
        if(is.na(mcols(yAll)[nInd,"pvalue"]))
            return(F)
@@ -399,7 +401,8 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
 findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     # dNodes <- Descendants(tree, nrow(y)+1, "child")
     # dNodes <- dNodes[sapply(Descendants(tree, dNodes),length) > 1]
-    # dNodes <- dNodes[sapply(Descendants(tree, dNodes), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)>1)]
+    # dNodes <- dNodes[sapply(Descendants(tree, dNodes, "all"), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)>1)]
+    # sums <- sapply(Descendants(tree, dNodes, "all"), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T))
     # 
     # pNodes <- Descendants(tree, nrow(y)+1, "child")
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes),length) > 1]
@@ -407,10 +410,13 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     
     desc <- unlist(Descendants(tree, ind, "all"))
     sigNodes <- desc[which(mcols(yAll)[desc,"pvalue"] < pCut)]
-    if(mcols(yAll)[ind,"pvalue"] < pCut & ind > length(tree$tip))
-        sigNodes <- c(ind, sigNodes)
+    if(!is.na(mcols(yAll)[ind,"pvalue"])) {
+        if(mcols(yAll)[ind,"pvalue"] < pCut & ind > length(tree$tip))
+            sigNodes <- c(ind, sigNodes)    
+    }
+    
     if(length(sigNodes) == 0)
-        return(-1)
+        return(c())
     # names(mSigNodes) <- sigNodes
     sigInn <- sort(sigNodes[sigNodes > nrow(y)])
     if(length(sigInn) == 0)
@@ -423,22 +429,38 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
         sigCons <- c(sigCons, sigLeft[1])
         sigLeft <- setdiff(sigLeft, c(sigLeft[1],unlist(Descendants(tree,sigLeft[1], "all"))))
     }
+    
     sigCondD <- unlist(Descendants(tree, sigCons,"all"))
     sigCons <- c(sigCons, setdiff(sigNodes,c(sigCons,sigCondD)))
-    print(sigNodes)
-    print(sigCons)
+    # print(sigNodes)
+    # print(sigCons)
     nodes <- lapply(sigCons, function(ind) findTNode(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs))
-    return(nodes)
+    return(unlist(nodes))
 }
 
 findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
-    if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
-        return(ind)
     if(length(intersect(unlist(Descendants(tree, ind)), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
         return(c())
+    if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
+        return(ind)
     children <- Descendants(tree, ind, "child")
     nodes <- c()
     for(child in children)
         nodes <- c(nodes,findTNode(yAll, tree, child, sigNodes, pCut, mIRVCut, signs))
     return(nodes)
+}
+
+climbMax <- function(y, tree, mIRVCut, alpha, minP=0.80, cores=1) {
+    l <- length(tree$tip)
+    pThresh <- estimatePThresh(y, alpha)
+    cNodes <- Descendants(tree, l+1, "child")
+    leaves <- cNodes[cNodes <= l]
+    sigNodes <- leaves[mcols(y)[leaves, "pvalue"] <= pThresh]
+    innNodes <- setdiff(cNodes, leaves)
+    descN <- Descendants(tree, innNodes, "all")
+    descN <- innNodes[sapply(descN, function(nodes) sum(mcols(y)[nodes,"pvalue"] < pThresh, na.rm=T)>0)]
+    
+    sigs <- unlist(mclapply(descN, function(node) findCNodes(y, tree, node, pThresh, mIRVCut, signs), mc.cores=cores))
+    sigNodes <- c(sigNodes, sigs)
+    return(sigNodes)
 }
