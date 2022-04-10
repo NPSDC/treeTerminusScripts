@@ -387,7 +387,8 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
         
     desc <- unlist(Descendants(tree, nInd,  'all')) ## Inner nodes
     children <- Descendants(tree, nInd,  'child')
-    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
+    #if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
+    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV    
         ##IS.NA()
             if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
                 return(T)
@@ -439,8 +440,9 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
 }
 
 findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
-    if(length(intersect(unlist(Descendants(tree, ind)), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
+    if(length(intersect(unlist(Descendants(tree, ind, "all")), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
         return(c())
+    # print('11')
     if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
         return(ind)
     children <- Descendants(tree, ind, "child")
