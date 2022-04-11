@@ -1,0 +1,65 @@
+---
+title: "TreeClimbR"
+author: "Noor Pratap Singh"
+date: "10/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(treeclimbR))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+load("environment/brain_sim/yAll.RData")
+load("environment/brain_sim/tree.RData")
+# mcols(yAll)[["pvalue"]][!mcols(yAll)[["keep"]]] <- runif(sum(!mcols(yAll)[["keep"]]),0,1)
+# mcols(yAll)[["qvalue"]][!mcols(yAll)[["keep"]]] <- 1
+swishRes <- data.frame(mcols(yAll))
+swishRes$node <- seq(1:nrow(yAll))
+swishRes <- swishRes[,-c(2)] ### Removing keep
+
+print(system.time(cSwish <- getCand(tree,
+                 score_data = swishRes,
+                 node_column = "node",
+                 p_column = "pvalue",
+                 sign_column = "log2FC")))
+save(cSwish, file = "environment/brain_sim/final1_NA/benchmark/cSwish.RData")
+# gc()
+bSwish <- list()
+print(system.time(bSwish[["0.01"]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=0.01)))
+print(system.time(bSwish[["0.05"]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=0.05)))
+print(system.time(bSwish[["0.1"]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=0.1)))
+save(bSwish, file = "environment/brain_sim/final1_NA/benchmark/bSwish.RData")
+gc()
+
+```
+
+```{r}
+load("environment/brain_sim/final1_NA/tAfter.RData")
+load("environment/brain_sim/final1_NA/tAfterNoStop.RData")
+detNodes <- list()
+detNodes[["tAfterqval"]] <- lapply(tAfter, function(ta) ta[["candNodeO"]])
+detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterNoStop, function(ta) ta[["candNodeO"]])
+detNodes[["tCR"]] <- lapply(bSwish, function(sw) sw$output[sw$output$signal.node,][["node"]])
+
+detNodesInn <- list()
+detNodesInn[["tAfterqval"]] <- lapply(detNodes[["tAfterqval"]], function(nodes) nodes[nodes > length(tree$tip)])
+detNodesInn[["tAfterqvalNoStop"]] <- lapply(detNodes[["tAfterqvalNoStop"]], function(nodes) nodes[nodes > length(tree$tip)])
+detNodesInn[["tCR"]] <- lapply(detNodes[["tCR"]], function(nodes) nodes[nodes > length(tree$tip)])
+tcrNodes <- detNodesInn[["tCR"]][[3]]
+
+nodesComm <- intersect(tcrNodes, detNodesInn[["tAfterqvalNoStop"]][[3]])
+nodesDiff <- setdiff(tcrNodes, nodesComm)
+descNodes <- Descendants(tree, nodesDiff)
+sapply(descNodes, function(node) sum(node %in% detNodes[[2]][[3]]) > 0)
+```
+Of the 29 inner nodes given by treeClimbR at 0.1, only 3 were also given by treeTerminus - 2 were at level 2 and 1 at level 3 (distance from leaves). 23 had atleast one descendant (leaf) that was labelled as significant by treeTerminus. Thus we are over-aggregating for these nodes.

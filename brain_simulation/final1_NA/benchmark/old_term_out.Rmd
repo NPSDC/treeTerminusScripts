@@ -1,0 +1,111 @@
+---
+title: "Old Terminus"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("old_terminus_helper.R"))
+load("environment/brain_sim/y.RData")
+```
+
+
+#### Loading cluster file
+```{r}
+# clFile <- "../brain_sim/out_term_hirak/1_1/clusters.txt"
+# groups <- parseClustFile(clFile, y)
+# 
+# print(hist(sapply(groups,length)))
+# print(summary(sapply(groups,length)))
+# print(sum(sapply(groups,length)))
+# print(length(groups))
+```
+
+
+#### Preparing Swish
+```{r}
+# mtxps <- setdiff(seq(nrow(y)), unlist(groups))
+# mInds <- c(mtxps, max(mtxps) + 1:length(groups))
+# yAllOT <- prepSwish(y, mInds, groups)
+# yAllOT <- scaleInfReps(yAllOT, lengthCorrect = T)
+# yAllOT <- labelKeep(yAllOT)
+set.seed(100)
+# yAllOT <- swish(yAllOT, x = "condition")
+# mcols(yAllOT)[["qvalue"]] <- qvalue(mcols(yAllOT)[["pvalue"]])
+# yAllOT <- computeInfRV(yAllOT)
+# save(yAllOT, file = "environment/brain_sim/final1_NA/benchmark/term_hirak_yAll.RData")
+load("environment/brain_sim/final1_NA/benchmark/term_hirak_yAll.RData")
+```
+
+#### Looking at dtes
+```{r}
+alphas <- c(0.01, 0.05, 0.1)
+dts <- sapply(alphas, function(alpha) which(mcols(yAllOT)[["qvalue"]] <= alpha)) ###Differentially transcript groups
+print(sapply(dts, length))
+print(sapply(dts, function(dts) sum(dts > length(mtxps))))
+
+dtAll <- lapply(dts, function(dt) extractTxpGroup(yAllOT, y, groups, dt, length(mtxps)))
+print(sapply(dtAll, length))
+```
+Number of differential subgroups much larger than treeTerminus
+
+#### Computing the metrics
+```{r}
+load("environment/brain_sim/simulate.rda")
+missingTxps <- setdiff(rownames(y), rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+aggCountsNodes <- computeAggNodesU(groups, mInds, sim.counts.mat[rownames(y),], NULL)
+# 
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]/aggCountsNodes[,1]))
+# 
+detNodes <- list()
+detNodes[["terminus_orig"]] <- dts
+negNodes <- list()
+negNodes[["terminus_orig"]] <- lapply(dts, function(dt) setdiff(seq(nrow(yAllOT)), dt))
+
+dfOldTerm <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = 0.023))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    dfOldTerm <- rbind(dfOldTerm, stats)
+}
+print(dfOldTerm)
+save(dfOldTerm, file = "environment/brain_sim/final1_NA/benchmark/dfOldTerm.RData")
+```
+
+```{r}
+# y <- labelKeep(y)
+# y <- swish(y, x = "condition")
+# detNodes <- vector(mode = "list", 10)
+# names(detNodes) <- paste("rand", seq(10), sep = "_")
+# negNodes <- vector(mode = "list", 10)
+# names(negNodes) <- paste("rand", seq(10), sep = "_")
+# 
+# df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+# for(i in seq(10)) {
+#     mcols(yAllOT)[["pvalue"]][!mcols(yAllOT)[["keep"]]] <- runif(sum(!mcols(yAllOT)[["keep"]]), 0, 1)
+#     mcols(yAllOT)[["qvalue"]] <- p.adjust(mcols(yAllOT)[["pvalue"]], method = "BH")
+#     
+#     dts <- sapply(alphas, function(alpha) which(mcols(yAllOT)[["qvalue"]] <= alpha)) ###Differentially transcript groups
+#     dtAll <- lapply(dts, function(dt) extractTxpGroup(yAllOT, y, groups, dt, length(mtxps)))
+#     
+#     rep <- paste("rand", i, sep = "_")
+#     detNodes[[rep]] <- dts
+#     negNodes[[rep]] <- lapply(dts, function(dt) setdiff(seq(nrow(yAllOT)), dt))
+#     
+#     stats <-  sapply(seq_along(detNodes[[rep]]), function(i) computeMetOut(detNodes[[rep]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[rep]][[i]], lfcThresh = 0.023))
+#     colnames(stats) <- colnames(df)[c(3:5)]
+#     stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+#     df <- rbind(df, stats)
+# }
+
+```
