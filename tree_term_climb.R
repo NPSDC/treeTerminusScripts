@@ -58,10 +58,29 @@ computeSign <- function(y, x, pc = 5, minP = 0.7) {
     return(signs)
 }
 
-estimatePThresh <- function(y, adjPval = 0.05) {
-    pvalues <- mcols(y)[["pvalue"]]
-    adPval <- which.min(abs(p.adjust(pvalues, method = "BH") - adjPval))
-    return(pvalues[adPval])
+estimatePThresh <- function(y, adjPval = 0.05, type = "BH") {
+    library(fdrtool)
+    pvalues <- c()
+    if(class(y)[1] == "RangedSummarizedExperiment" | class(y)[1] == "SummarizedExperiment")
+        pvalues <- mcols(y)[["pvalue"]]
+    else{
+        if(class(y) == "numeric")
+            pvalues <- y
+        else
+            stop("invalid class")
+    }
+        
+    if(type=="BH") {
+        adPval <- which.min(abs(p.adjust(pvalues, method = "BH") - adjPval))
+        return(pvalues[adPval])
+    }
+    else{
+        pvalues <- pvalues[!is.na(pvalues)]
+        fdrIn <- which.min(abs(fdrtool(pvalues, statistic="pvalue")[["lfdr"]] - adjPval))
+        return(pvalues[fdrIn])
+    }
+        
+    
 }
 
 checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, temp = F)
@@ -390,11 +409,12 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
     #if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
     if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV    
         ##IS.NA()
-            if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
-                return(T)
-            if(!all(mcols(yAll)[children,"pvalue"] < pCut)) { ##all children cant be significant
-                return(T)
-        }
+            if(sum(is.na(mcols(yAll)[desc,"pvalue"])) > 0 | !all(mcols(yAll)[desc,"pvalue"] < pCut, na.rm=T)) {
+                if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
+                    return(T)
+                if(!all(mcols(yAll)[children,"pvalue"] < pCut))  ##all children cant be significant
+                    return(T)
+            }
     }
     return(F)
 }
@@ -419,11 +439,13 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     if(length(sigNodes) == 0)
         return(c())
     # names(mSigNodes) <- sigNodes
-    sigInn <- sort(sigNodes[sigNodes > nrow(y)])
+    
+    sigInn <- sort(sigNodes[sigNodes > length(tree$tip)])
     if(length(sigInn) == 0)
         return(sigNodes)
     sigCons <- c() ##sigNodes that are non overlapping
     sigLeft <- sigInn
+    
     #descSig <- Descendants(tree, sigInn, "all")
     #print(paste("sigLeft", sigLeft))
     while(length(sigLeft) > 0) {
@@ -436,13 +458,16 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     # print(sigNodes)
     # print(sigCons)
     nodes <- lapply(sigCons, function(ind) findTNode(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs))
+    
     return(unlist(nodes))
 }
 
 findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
-    if(length(intersect(unlist(Descendants(tree, ind, "all")), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
+    
+    if(length(intersect(c(ind,unlist(Descendants(tree, ind, "all"))), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
         return(c())
-    # print('11')
+    
+    #print(sigNodes)
     if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
         return(ind)
     children <- Descendants(tree, ind, "child")
