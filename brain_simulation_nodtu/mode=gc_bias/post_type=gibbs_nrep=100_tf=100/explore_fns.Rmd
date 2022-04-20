@@ -1,0 +1,200 @@
+---
+title: "explore fns"
+author: "Noor Pratap Singh"
+date: "4/10/2022"
+output: html_document
+---
+
+Trying to see what transcripts/genes can be recovered from tree climbing
+1) Ideally has atleast one significant ancestor (defined by qvalue)
+2) no significant sibling
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/simulate.rda")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+signs <- computeSign(yAll, "condition", minP=0.80)
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+
+dtInds <- match(dts, rownames(y))
+sTxps <- which(mcols(y)[["qvalue"]] < 0.1)
+
+trueG <- union(dge.genes, dte.genes)
+sGenes <- unique(mapDf[rownames(y)[sTxps],1])
+print(length(sGenes))
+print(length(intersect(sGenes, trueG)))
+```
+We have a total of 3543 genes identified by us out of which 3082 are true dges.
+1068 are still missed.
+We look at the transcripts of these 1068 genes and see how many of them can be retrieved by the tree structure
+These map to 6344 txps out which 390 map to Ancestors so cant be salavaged
+Only 289 txps have ancestors that have ancestors meeting lfdr pvalue
+```{r}
+fGenes <- setdiff(trueG, sGenes)
+print(length(fGenes))
+fGTXps <- sapply(fGenes, function(g) match(mapDf[,2][mapDf[,1] == g], rownames(y)))
+
+fT <- unlist(fGTXps)
+fT <- fT[!is.na(fT)]
+
+fTxps <- fT
+
+Anc <- Ancestors(tree, fTxps, "parent")
+print(sum(Anc == nrow(y)+1)) ### Txps that have root as parent aka cant be saved by tree
+
+fTxps <- fTxps[Anc != nrow(y)+1]
+Ancs <- Ancestors(tree, fTxps)
+
+###Finding lfdr threshold
+library(fdrtool)
+pvalsInn <- mcols(yAll)[["pvalue"]][nrow(y)+1:tree$Nnode]
+naInds <- is.na(pvalsInn)
+fdrIn <- fdrtool(pvalsInn[!naInds], statistic="pvalue")
+pvalAdjIn <- rep(1, length(naInds))
+pvalAdjIn[!naInds] <- fdrIn[["lfdr"]]
+plfdr <- pvalsInn[which.min(abs(pvalAdjIn - 0.1))] ##0.1 thresh
+print(plfdr)
+
+sig <- sapply(Ancs, function(anc) sum(mcols(yAll)[anc,"pvalue"] < plfdr, na.rm=T) > 0) #289 txps that have atleast one sig ancestor
+fTxps <- fTxps[sig]
+print(length(fTxps))
+Ancs <- Ancs[sig]
+ls <- sapply(Ancs,length)
+AncsM <- sapply(Ancs, function(anc) max(anc[which(mcols(yAll)[anc,"pvalue"] < plfdr)]))
+
+sameSigns <- sapply(Descendants(tree, AncsM, "all"), function(nodes) all(signs[nodes]>=0) | all(signs[nodes]<=0)) ##Out of these 179 txps have ancestors with same signs
+print(sum(sameSigns)) 
+
+rTxps <- fTxps[sameSigns]
+Ancs <- Ancs[sameSigns]
+AncsM <- AncsM[sameSigns]
+
+unSTxps <- setdiff(unlist(fT), rTxps) ##Transcripts that cant be saved
+unG <- unique(mapDf[rownames(y)[unSTxps],1]) #1001 genes can't be saved
+print(length(unG))
+
+rG <- unique(mapDf[rownames(y)[rTxps],1]) #37 genes can be saved so far
+print(length(rTxps))
+print(length(rG))
+
+sibs <- Siblings(tree, rTxps) ###Siblings
+sSib <- sapply(sibs, function(x) {
+  xIn <- x[x > nrow(y)]
+  xL <- x[x <= nrow(y)]
+  inn <- F
+  leaf <- F
+  if(length(xL) > 0 & sum(mcols(yAll)[xL, "qvalue"] < 0.1, na.rm = T) > 0)
+      leaf <- T
+  if(length(xIn) > 0 & sum(mcols(yAll)[xIn, "pvalue"] < 0.0012, na.rm = T) > 0)
+      inn <- T
+  return(inn | leaf)
+})
+print(sum(sSib)) ## 44 txps have siblings that are significant
+rTxps <- rTxps[!sSib]
+Ancs <- Ancs[!sSib]
+AncsM <- AncsM[!sSib]
+
+mirvI <- sapply(Descendants(tree, AncsM), function(nodes) sum(mcols(yAll)[nodes, "meanInfRV"] < 0.2) > 0) ## 45
+print(sum(mirvI))
+rTxps <- rTxps[!mirvI]
+Ancs <- Ancs[!mirvI]
+print(length(rTxps))
+rGe <- unique(mapDf[rownames(y)[rTxps],1]) 
+print(length(rGe)) ##29 Genes
+```
+
+#### Using a higher pvalue threshold
+```{r}
+fTxps <- fT
+
+Anc <- Ancestors(tree, fTxps, "parent")
+print(sum(Anc == nrow(y)+1)) ### Txps that have root as parent aka cant be saved by tree
+
+fTxps <- fTxps[Anc != nrow(y)+1]
+Ancs <- Ancestors(tree, fTxps)
+pThr <- estimatePThresh(yAll[1:nrow(y),],0.1)
+print(pThr)
+sig <- sapply(Ancs, function(anc) sum(mcols(yAll)[anc,"pvalue"] < pThr, na.rm=T) > 0) #536 txps that have atleast one sig ancestor
+fTxps <- fTxps[sig]
+print(length(fTxps))
+Ancs <- Ancs[sig]
+ls <- sapply(Ancs,length)
+AncsM <- sapply(Ancs, function(anc) max(anc[which(mcols(yAll)[anc,"pvalue"] < pThr)]))
+
+sameSigns <- sapply(Descendants(tree, AncsM, "all"), function(nodes) all(signs[nodes]>=0) | all(signs[nodes]<=0)) ##Out of these 364 txps have ancestors with same signs
+print(sum(sameSigns))
+
+rTxps <- fTxps[sameSigns]
+Ancs <- Ancs[sameSigns]
+AncsM <- AncsM[sameSigns]
+
+unSTxps <- setdiff(unlist(fT), rTxps) ##Transcripts that cant be saved
+unG <- unique(mapDf[rownames(y)[unSTxps],1]) #975 genes can't be saved
+print(length(unG))
+
+rG <- unique(mapDf[rownames(y)[rTxps],1]) #81 genes can be saved so far
+print(length(rTxps))
+print(length(rG))
+
+sibs <- Siblings(tree, rTxps) ###Siblings
+sSib <- sapply(sibs, function(x) {
+  xIn <- x[x > nrow(y)]
+  xL <- x[x <= nrow(y)]
+  inn <- F
+  leaf <- F
+  if(length(xL) > 0 & sum(mcols(yAll)[xL, "qvalue"] < 0.1, na.rm = T) > 0)
+      leaf <- T
+  if(length(xIn) > 0 & sum(mcols(yAll)[xIn, "pvalue"] < 0.0012, na.rm = T) > 0)
+      inn <- T
+  return(inn | leaf)
+})
+print(sum(sSib)) ## 47 txps have siblings that are significant
+rTxps <- rTxps[!sSib]
+Ancs <- Ancs[!sSib]
+AncsM <- AncsM[!sSib]
+
+mirvI <- sapply(Descendants(tree, AncsM), function(nodes) sum(mcols(yAll)[nodes, "meanInfRV"] < 0.2) > 0) ## 118 dont meet the infrv criteria
+print(sum(mirvI))
+rTxps <- rTxps[!mirvI]
+Ancs <- Ancs[!mirvI]
+print(length(rTxps))
+rGe <- unique(mapDf[rownames(y)[rTxps],1]) ##67 genes more
+print(length(rGe))
+```
+
+```{r}
+unTDTE <- intersect(unSTxps, match(names(iso.dte)[iso.dte], rownames(y)))
+length(unTDTE)
+unTDGE <- intersect(unSTxps, match(names(iso.dge)[iso.dge], rownames(y)))
+length(unTDGE)
+
+unTDGE <- intersect(unSTxps, match(names(iso.dte)[iso.dte], rownames(y)))
+length(unTDTE)
+unTDGE <- intersect(unSTxps, match(names(iso.dge)[iso.dge], rownames(y)))
+length(unTDGE)
+
+unTDTE <- unTDTE[sapply(Ancestors(tree, unTDTE), length)!=1]
+unTDGE <- unTDGE[sapply(Ancestors(tree, unTDGE), length)!=1]
+
+SibsDTE <- Siblings(tree, unTDTE)
+```

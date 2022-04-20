@@ -1,0 +1,105 @@
+---
+title: "Compute Metrics"
+author: "Noor Pratap Singh"
+date: "4/18/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/simulate.rda")
+library(fdrtool)
+
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bSwish.RData")
+```
+
+```{r}
+signs <- computeSign(yAll, "condition")
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+dts <- setdiff(dts, dts[which(abs(logFCNodes[dts]) <= rootFC)])
+
+print(mean(abs(logFCNodes[dts]) > rootFC))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(tAfterBHMoreClimbMIRV[[1]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(tAfterBHMoreClimbMIRV[[2]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(tAfterBHMoreClimbMIRV[[3]], function(ta) ta)
+detNodes[["treeClimbR"]] <- lapply(bSwish, function(sw) sw$output[sw$output$signal.node,][["node"]])
+detNodes[["treeClimbRO"]] <- lapply(bSwish, function(sw) unlist(Descendants(tree,sw$output[sw$output$signal.node,][["node"]])))
+
+#### Running fdrtool
+pvalAdjL <- p.adjust(mcols(yAll)[["pvalue"]][1:nrow(y)], method="BH")
+pvalsInn <- mcols(yAll)[["pvalue"]][nrow(y)+1:tree$Nnode]
+naInds <- is.na(pvalsInn)
+fdrIn <- fdrtool(pvalsInn[!naInds], statistic="pvalue")
+
+pvalAdjIn <- rep(1, length(naInds))
+pvalAdjIn[!naInds] <- fdrIn[["lfdr"]]
+inCNodes <- lapply(c(0.01, 0.05, 0.1), function(alpha) which(pvalAdjIn < alpha))
+inCNodes <- lapply(inCNodes, function(x) c(nrow(y)+1:tree$Nnode)[x])
+inCNodes <- sapply(seq_along(inCNodes), function(i) intersect(tAfterQvalue[[i]][["candNodeO"]], inCNodes[[i]]))
+
+detNodes[["tAfterlFDR"]] <- lapply(c(0.01, 0.05, 0.1), function(alpha) which(pvalAdjL < alpha)) ## All leaf nodes
+detNodes[["tAfterlFDR"]] <- lapply(seq(3), function(i) c(detNodes[["tAfterlFDR"]][[i]], inCNodes[[i]]))
+```
+
+```{r}
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+negNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterlFDR"]] <- lapply(detNodes[["tAfterlFDR"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+negNodes[["treeClimbR"]] <- lapply(detNodes[["treeClimbR"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+negNodes[["treeClimbRO"]] <- lapply(detNodes[["treeClimbRO"]], function(det) setdiff(seq(nrow(y)), det))
+
+df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
+for(n in names(detNodes))
+{
+    print(n)
+    stats <-  sapply(seq_along(detNodes[[n]]), function(i) computeMetOut(detNodes[[n]][[i]], logFCNodes, tree = tree, negNodes = negNodes[[n]][[i]], lfcThresh = rootFC-0.001))
+    colnames(stats) <- colnames(df)[c(3:5)]
+    stats <- cbind(Method=rep(n,2), Metric = c("FDR", "TPR"), stats)
+    df <- rbind(df, stats)
+}
+print(df)
+```
+
+#### Inner nodes
+```{r}
+print(sapply(detNodes$treeClimbR, function(x) sum(x>nrow(y)))) ###treeClimbR
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(x) sum(x>nrow(y)))) ##the methods
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(x) sum(x>nrow(y))))
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(x) sum(x>nrow(y))))
+
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+print(sapply(detNodes[["treeClimbR"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+
+```

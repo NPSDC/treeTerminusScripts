@@ -1,0 +1,67 @@
+---
+title: "Gene Level Analysis on the brain dataset with low log fold change"
+author: "Noor Pratap Singh"
+date: "4/19/2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+
+#### Loading data
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/seBrainSim.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/simulate.rda")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+geneT <- c(dge.genes, dte.genes)
+print(length(unique(geneT)))
+```
+
+#### Gene Level Swish
+```{r}
+gy <- summarizeToGene(seBrainSim)
+print(gy)
+
+gy <- scaleInfReps(gy)
+gy <- labelKeep(gy)
+gy <- gy[mcols(gy)$keep,]
+set.seed(1)
+gy <- swish(gy, x="condition", nperms=64)
+
+dgs <- rownames(gy)[mcols(gy)[["qvalue"]] <= 0.1]
+print(sum(dgs %in% geneT)) ##True positive genes 
+print(sum(!dgs %in% geneT)) ##False positive genes 
+gTP <- dgs[dgs %in% geneT] ##True positive genes from differential gene analysis
+print(length(gTP))
+```
+
+#### Mapping differential transcripts to genes
+```{r}
+dts <- rownames(y)[which(mcols(y)[["qvalue"]] <= 0.1)]
+dtsG <- unique(mapDf[dts, 1]) ## Genes given by mapping differentially expressed transcripts to gene
+print(sum(dtsG %in% geneT)) ##True positive genes 
+print(sum(!dtsG %in% geneT)) ##True positive genes
+dtGTP <- dtsG[dtsG %in% geneT]
+
+print(length(setdiff(gTP, dtGTP)))
+```
+
+#### Using our method
+```{r}
+gMIRV <- unique(mapDf[rownames(y)[unlist(Descendants(tree,tAfterBHMoreClimbMIRV[[3]][[3]]))],1])
+print(length(gMIRV))
+print(sum(gMIRV %in% geneT))
+print(sum(!gMIRV %in% geneT))
+gmiTP <- gMIRV[gMIRV %in% geneT]
+print(length(setdiff(gTP, gmiTP)))
+```
+Even at the gene level, swish is only able to capture 2720 true genes, while mapping differential transcripts to genes is able to capture more (3082/3097) out of a total of 4150. But there still exists 55 genes captured by dge analysis missed by differential transcript analysis
+The false positive mapping dts to dges is higher. 
