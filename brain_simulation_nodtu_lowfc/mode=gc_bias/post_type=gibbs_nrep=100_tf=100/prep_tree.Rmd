@@ -41,7 +41,7 @@ yAll <- prepSwish(tree, y)
 yAll <- scaleInfReps(yAll, lengthCorrect = T)
 yAll <- labelKeep(yAll)
 yAll <- swish(yAll, x = "condition")
-yAll <- computeInfRV(yAll)
+yAll <- computeInfRV(yAll, meanVariance=F)
 hist(mcols(yAll)[["pvalue"]])
 save(yAll, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
 ```

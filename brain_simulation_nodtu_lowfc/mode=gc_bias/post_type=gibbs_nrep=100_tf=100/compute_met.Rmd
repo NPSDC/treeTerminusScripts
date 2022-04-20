@@ -13,14 +13,19 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 ```{r}
 suppressPackageStartupMessages(source("tree_helper_function.R"))
 suppressPackageStartupMessages(source("tree_term_climb.R"))
+library(fdrtool)
 load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
 load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
 load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
 load("environment/brain_sim_nodtu_lowfc/simulate.rda")
 
 load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue.RData")
-load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalueNoStop.RData")
-load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_NoSign.RData")
+#load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_redinf.RData")
+#load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimb.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/oth/tAfterBHMoreClimbMIRV.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bSwish.RData")
+# load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalueNoStop.RData")
+# load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterQvalue_NoSign.RData")
 ```
 
 ```{r}
@@ -46,18 +51,50 @@ print(mean(abs(logFCNodes[dts]) > rootFC))
 ```{r}
 detNodes <- list()
 detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
-detNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) ta[["candNodeO"]])
-detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) ta[["candNodeO"]])
-detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterqval_redinf"]] <- lapply(tAfterQvalue_redinf, function(ta) ta[["candNodeO"]])
+#detNodes[["tAfterBHMoreClimb"]] <- lapply(tAfterBHMoreClimb, function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(tAfterBHMoreClimbMIRV[[1]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(tAfterBHMoreClimbMIRV[[2]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(tAfterBHMoreClimbMIRV[[3]], function(ta) ta)
+detNodes[["treeClimbR"]] <- lapply(bSwish, function(sw) sw$output[sw$output$signal.node,][["node"]])
+detNodes[["treeClimbRO"]] <- lapply(bSwish, function(sw) unlist(Descendants(tree,sw$output[sw$output$signal.node,][["node"]])))
+#detNodes[["tAfterRelax"]] <- lapply(tAfterRelax, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) ta[["candNodeO"]])
+# detNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) ta[["candNodeO"]])
+
+#### Running fdrtool
+pvalAdjL <- p.adjust(mcols(yAll)[["pvalue"]][1:nrow(y)], method="BH")
+pvalsInn <- mcols(yAll)[["pvalue"]][nrow(y)+1:tree$Nnode]
+naInds <- is.na(pvalsInn)
+fdrIn <- fdrtool(pvalsInn[!naInds], statistic="pvalue")
+
+pvalAdjIn <- rep(1, length(naInds))
+pvalAdjIn[!naInds] <- fdrIn[["lfdr"]]
+inCNodes <- lapply(c(0.01, 0.05, 0.1), function(alpha) which(pvalAdjIn < alpha))
+inCNodes <- lapply(inCNodes, function(x) c(nrow(y)+1:tree$Nnode)[x])
+inCNodes <- sapply(seq_along(inCNodes), function(i) intersect(tAfterQvalue[[i]][["candNodeO"]], inCNodes[[i]]))
+
+detNodes[["tAfterlFDR"]] <- lapply(c(0.01, 0.05, 0.1), function(alpha) which(pvalAdjL < alpha)) ## All leaf nodes
+detNodes[["tAfterlFDR"]] <- lapply(seq(3), function(i) c(detNodes[["tAfterlFDR"]][[i]], inCNodes[[i]]))
+print(sapply(detNodes$treeClimbR, function(x) sum(x>nrow(y))))
 ```
 
 ```{r}
 negNodes <- list()
 negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
-negNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
-negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
-negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
-
+# negNodes[["tAfterqval"]] <- lapply(tAfterQvalue, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+# negNodes[["tAfterqval_redinf"]] <- lapply(tAfterQvalue_redinf, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+#negNodes[["tAfterRelax"]] <- lapply(tAfterRelax, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+# negNodes[["tAfterBHMoreClimb"]] <- lapply(detNodes[["tAfterBHMoreClimb"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+# negNodes[["tAfterqvalNoSign"]] <- lapply(tAfterQvalueNoSign, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+# negNodes[["tAfterqvalNoStop"]] <- lapply(tAfterQvalueNoStop, function(ta) unlist(Descendants(tree,c(ta[["naNodeO"]],ta[["negNodeO"]]))))
+negNodes[["tAfterlFDR"]] <- lapply(detNodes[["tAfterlFDR"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes))))
+negNodes[["treeClimbR"]] <- lapply(detNodes[["treeClimbR"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+negNodes[["treeClimbRO"]] <- lapply(detNodes[["treeClimbRO"]], function(det) setdiff(seq(nrow(y)), det))
 
 df <- data.frame(Method=character(), Metric=character(), FDR_0.01 = numeric(), FDR_0.05 = numeric(), FDR_0.10 = numeric())
 for(n in names(detNodes))
@@ -72,50 +109,15 @@ print(df)
 
 ```
 
-<!-- ```{r} -->
-<!-- negNodes <- c(tAfterQvalue[[3]][["naNodeO"]], tAfterQvalue[[3]][["negNodeO"]]) -->
-<!-- negNodes <- negNodes[order(mcols(yAll)[negNodes, 'meanInfRV'], decreasing = T)] -->
-<!-- tpNodes <- match(names(logFCNodes)[abs(logFCNodes) > rootFC], rownames(yAll)) -->
-<!-- fns <- intersect(tpNodes, negNodes) -->
-<!-- fns <- fns[order(mcols(yAll)[fns, 'meanInfRV'], decreasing = T)] -->
-<!-- fnsL <- fns[fns < nrow(y)] -->
-<!-- print(length(fnsL)) -->
+#### Inner nodes
+```{r}
+print(sapply(detNodes$treeClimbR, function(x) sum(x>nrow(y)))) ###treeClimbR
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(x) sum(x>nrow(y)))) ##the methods
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(x) sum(x>nrow(y))))
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(x) sum(x>nrow(y))))
 
-<!-- pmatch <- fnsL[which(mcols(yAll)[["pvalue"]][fnsL] < tAfterQvalue[[3]][["pChild"]])] ##All leaves that have pvalue less than threshold -->
-<!-- sum(tAfterQvalue[[3]][["resDf"]][match(pmatch, tAfterQvalue[[3]][["resDf"]][,3]),2] > 0.1) -->
-<!-- ``` -->
-<!-- 141 missed due to multi hypothesis correction -->
-
-<!-- ```{r} -->
-<!-- fnsL <- setdiff(fnsL, pmatch) -->
-<!-- oppNodes <- fnsL[sapply(fnsL, function(node) { -->
-<!--   sig <- signs[Descendants(tree, Ancestors(tree, node)[1])[[1]]] -->
-<!--   if(all(sig >= 0, na.rm=T) | all(sig <= 0, na.rm=T)) -->
-<!--       return(F) -->
-<!--   return(T) -->
-<!-- })] -->
-<!-- print(length(oppNodes)) -->
-<!-- anc <- Ancestors(tree, oppNodes) -->
-<!-- oppAnc <- oppNodes[sapply(anc, function(nodes) sum(mcols(yAll)[nodes,"pvalue"] < tAfterQvalue[[3]][["pChild"]]) > 0)] -->
-<!-- print(length(oppAnc)) -->
-<!-- ``` -->
-<!-- 733 transcripts that had siblings with opposite signs, out of these 94 have ancestors that have significant pvalues -->
-
-<!-- ```{r} -->
-<!-- fnsL <- setdiff(fnsL, oppNodes) -->
-<!-- Sibs <- Siblings(tree, fnsL) -->
-<!-- sibFN <- fnsL[which(sapply(Sibs, function(sib) sum(mcols(yAll)[c(sib,unlist(Descendants(tree,sib,"all"))),"pvalue"] < tAfterQvalue[[3]][["pChild"]], na.rm=T) > 0))] -->
-<!-- print(length(sibFN)) -->
-<!-- ``` -->
-<!-- 919 have siblings or either their descendants that have significant pvalue -->
-
-<!-- ```{r} -->
-<!-- fnsL <- setdiff(fnsL, sibFN) -->
-<!-- fnInf <- fnsL[sapply(fnsL, function(node) sum(mcols(yAll)[c(Siblings(tree, node), node),"meanInfRV"] < 0.3) > 0)] -->
-<!-- fnsL <- setdiff(fnsL, fnInf) -->
-<!-- ``` -->
-<!-- 215 nodes dont climb because of infRV criteria -->
-
-<!-- For the remaining 3 nodes, descendants of siblings had already been looked -->
-
-<!-- Look at ancestor nodes for oppNodes -->
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+print(sapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+print(sapply(detNodes[["treeClimbR"]], function(x) mean(abs(logFCNodes[x[x>nrow(y)]]) < rootFC)))
+```

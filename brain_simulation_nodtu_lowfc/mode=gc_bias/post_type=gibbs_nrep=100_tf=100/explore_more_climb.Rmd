@@ -1,0 +1,120 @@
+---
+title: "explore_MoreClimb"
+author: "Noor Pratap Singh"
+date: "4/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+## R Markdown
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+#load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/oth/tAfterBHMoreClimbMIRV.RData")
+load("environment/brain_sim_nodtu_lowfc/simulate.rda")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+
+signs <- computeSign(yAll, "condition", minP=0.80)
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+iso.any <- iso.dtu | iso.dte | iso.dge
+dts <- intersect(names(iso.any)[iso.any], names(logFCNodes))
+rootFC <- abs(logFCNodes[length(tree$tip)+1])
+dts <- setdiff(dts, dts[which(abs(logFCNodes[dts]) <= rootFC)])
+trueG <- union(dge.genes, dte.genes)
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(tAfterBHMoreClimbMIRV[[1]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(tAfterBHMoreClimbMIRV[[2]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(tAfterBHMoreClimbMIRV[[3]], function(ta) ta)
+
+sapply(detNodes, function(nodes) length(unlist(Descendants(tree, nodes[[3]])))) ###Length at FDR 0.1
+descBH <- unlist(Descendants(tree, tAfterBHMoreClimbMIRV[[3]][[3]]))
+swishGenes <- unique(mapDf[rownames(y)[which(mcols(y)[["qvalue"]] < 0.1)],1])
+bhGenes <- unique(mapDf[rownames(y)[descBH],1])
+
+tS <- intersect(trueG,swishGenes)
+tBh <- intersect(trueG,bhGenes)
+
+print(length(tS))
+print(length(tBh))
+
+print(c(length(swishGenes)-length(tS))/length(swishGenes)) ##FDR at genes
+print(c(length(bhGenes)-length(tBh))/length(bhGenes)) ##FDR at genes
+
+gDiff <- setdiff(tBh, tS)
+print(length(gDiff))
+```
+
+```{r}
+gTxps <- sapply(gDiff, function(g) match(mapDf[,2][mapDf[,1] == g], rownames(y)))
+gTxps <- lapply(gTxps, function(txp) txp[!is.na(txp)])
+gTxps <- lapply(gTxps, function(txp) txp[order(mcols(y)[txp,"pvalue"])])
+gT <- unlist(gTxps)
+gT <- gT[!is.na(gT)]
+```
+
+###Some example genes
+```{r}
+i <- 1
+anc <- Ancestors(tree,gTxps[[i]][1])[Ancestors(tree,gTxps[[i]][1]) %in% tAfterBHMoreClimbMIRV[[3]][[3]]]
+par(mfrow=c(1,2))
+plotInfReps(yAll, idx=anc, x="condition")
+plotInfReps(yAll, idx=gTxps[[i]][1], x="condition")
+```
+
+
+ENSG00000115947.13
+```{r}
+i <- 4
+anc <- Ancestors(tree,gTxps[[i]][1])[Ancestors(tree,gTxps[[i]][1]) %in% tAfterBHMoreClimbMIRV[[3]][[3]]]
+par(mfrow=c(1,2))
+plotInfReps(yAll, idx=anc, x="condition")
+plotInfReps(yAll, idx=gTxps[[i]][1], x="condition")
+```
+
+```{r}
+i <- 6
+j <- 1
+anc <- Ancestors(tree,gTxps[[i]][j])[Ancestors(tree,gTxps[[i]][j]) %in% tAfterBHMoreClimbMIRV[[3]][[3]]]
+par(mfrow=c(1,2))
+plotInfReps(yAll, idx=anc, x="condition")
+plotInfReps(yAll, idx=gTxps[[i]][1], x="condition")
+```
+
+```{r}
+i <- 14
+j <- 2
+anc <- Ancestors(tree,gTxps[[i]][j])[Ancestors(tree,gTxps[[i]][j]) %in% tAfterBHMoreClimbMIRV[[3]][[3]]]
+par(mfrow=c(1,2))
+plotInfReps(yAll, idx=anc, x="condition")
+plotInfReps(yAll, idx=gTxps[[i]][1], x="condition")
+```
+
+```{r}
+i <- 19
+j <- 1
+anc <- Ancestors(tree,gTxps[[i]][j])[Ancestors(tree,gTxps[[i]][j]) %in% tAfterBHMoreClimbMIRV[[3]][[3]]]
+par(mfrow=c(1,2))
+plotInfReps(yAll, idx=anc, x="condition")
+plotInfReps(yAll, idx=gTxps[[i]][1], x="condition")
+```

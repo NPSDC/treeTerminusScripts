@@ -97,7 +97,7 @@ if (!onlyDTU) {
     this.txs.expressed <- this.txs[tpm.this.txs > 0]
     iso.dge[this.txs.expressed] <- TRUE
     coinflip <- sample(c(FALSE,TRUE),1)
-    fc <- runif(1,2,3)
+    fc <- runif(1,1.4,2.8)
     if (coinflip) {
       tpms[this.txs,2] <- fc * tpm.this.txs
     } else {
@@ -118,7 +118,7 @@ if (!onlyDTU) {
     }
     coinflip <- sample(c(FALSE,TRUE),1)
     #fc <- runif(1,2,6)
-    fc <- runif(1,2,3)
+    fc <- runif(1,1.4,2.8)
     if (coinflip) {
       tpms[this.txs,2][exprs.tx] <- fc * tpm.this.txs[exprs.tx]
     } else {

@@ -1,0 +1,51 @@
+---
+title: "MoreClimb"
+author: "Noor Pratap Singh"
+date: "4/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+```
+
+#### Distribution of signs and levels
+```{r}
+minInfRV <- 0.40
+nLeaf <- length(tree$tip)
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+```{r}
+# print(system.time(tAfterBHMoreClimb <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0.4, alpha, cores=3), mc.cores=3)))
+# save(tAfterBHMoreClimb, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimb.RData")
+
+tAfterBHMoreClimbMIRV <- list() ## These are with mIRV criteria on child only
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0, alpha, cores=3), mc.cores=3)))
+# save(tAfterBHMoreClimbMIRV, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+save(tAfterBHMoreClimbMIRV, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/oth/tAfterBHMoreClimbMIRV.RData")
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0.4, alpha, cores=3), mc.cores=3)))
+# save(tAfterBHMoreClimbMIRV, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+save(tAfterBHMoreClimbMIRV, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/oth/tAfterBHMoreClimbMIRV.RData")
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=1"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 1, alpha, cores=3), mc.cores=3)))
+# save(tAfterBHMoreClimbMIRV, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+save(tAfterBHMoreClimbMIRV, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/oth/tAfterBHMoreClimbMIRV.RData")
+```

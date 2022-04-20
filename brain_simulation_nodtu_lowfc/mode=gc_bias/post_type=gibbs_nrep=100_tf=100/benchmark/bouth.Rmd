@@ -1,0 +1,31 @@
+---
+title: "Run BOUTH"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(BOUTH))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+
+bouthTree <- getTreeDf(tree)
+save(bouthTree, file="environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bouthTree.RData")
+# load("environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bouthTree.RData")
+mcols(y)[["keep"]] <- T
+y <- swish(y, x="condition")
+pvalues <- mcols(y)[["pvalue"]]
+
+bouth_brain <- list()
+print(system.time(bouth_brain[['0.01']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.01, is.weighted = TRUE)))
+save(bouth_brain, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bouthBrain.RData")
+print(system.time(bouth_brain[['0.05']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.05, is.weighted = TRUE)))
+print(system.time(bouth_brain[['0.1']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.1, is.weighted = TRUE)))
+save(bouth_brain, file = "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bouthBrain.RData")
+```
