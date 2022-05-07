@@ -1,0 +1,118 @@
+---
+title: "Other metrics"
+author: "Noor Pratap Singh"
+date: "5/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tAfterBHMoreClimbMIRV.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/benchmark/bSwish.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/simulate.rda")
+```
+
+### From Swish code base https://github.com/mikelove/fishpond/blob/master/R/swish.R
+```{r}
+getInfReps <- function(ys) {
+  infRepIdx <- grep("infRep",assayNames(ys))
+ # infRepError(infRepIdx)
+  infReps <- assays(ys)[infRepIdx]
+  abind::abind(as.list(infReps), along=3)
+}
+
+getLog2FC <- function(infRepsArray, condition, pc=5, array=FALSE) {
+  dims <- dim(infRepsArray)
+  cond1 <- condition == levels(condition)[1]
+  cond2 <- condition == levels(condition)[2]
+  diffs <- matrix(nrow=dims[1],ncol=dims[3])
+  for (k in seq_len(dims[3])) {
+    diffs[,k] <- log2(rowMeans(infRepsArray[,cond2,k]) + pc) -
+                 log2(rowMeans(infRepsArray[,cond1,k]) + pc)
+  }
+  if (array) {
+    return(diffs)
+  }
+  # median over inferential replicates
+  rowMedians(diffs)
+}
+```
+
+```{r}
+missingTxps <- setdiff(tree$tip, rownames(sim.counts.mat))
+sim.counts.mat <- rbind(sim.counts.mat, matrix(0, nrow = length(missingTxps), ncol = ncol(sim.counts.mat),
+                                               dimnames = list(missingTxps, colnames(sim.counts.mat))))
+sim.counts.mat <- sim.counts.mat[tree$tip,]
+length(missingTxps)
+
+innNodes <- length(tree$tip)+1:tree$Nnode
+aggCountsNodes <- computeAggNodesU(tree, c(1:length(tree$tip),innNodes), sim.counts.mat)
+
+logFCNodes <- ifelse(rowSums(aggCountsNodes)==0, 0, log2(aggCountsNodes[,2]+1)-log2(aggCountsNodes[,1]+1))
+```
+
+```{r}
+detNodes <- list()
+detNodes[["Swish"]] <- lapply(c(0.01, 0.05, 0.1), function(x) which(mcols(y)[,"qvalue"] <= x ))
+detNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(tAfterBHMoreClimbMIRV[[1]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(tAfterBHMoreClimbMIRV[[2]], function(ta) ta)
+detNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(tAfterBHMoreClimbMIRV[[3]], function(ta) ta)
+# detNodes[["ancMIRV=0.4"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(ta) {
+#     anc <- Ancestors(tree,ta, "parent")
+#     anc[anc==(nrow(y)+1)] = ta[anc==(nrow(y)+1)]
+#     unique(anc)
+#     })
+detNodes[["treeClimbR"]] <- lapply(bSwish, function(sw)
+    sw$output[sw$output$signal.node,][["node"]])
+detNodes[["rChild"]] <- lapply(seq(3), function(i) Descendants(tree, length(tree$tip)+1, "child"))
+
+negNodes <- list()
+negNodes[["Swish"]] <- lapply(detNodes[["Swish"]], function(x) setdiff(seq(nrow(y)), x))
+negNodes[["tAfterBHMoreClimbMIRV=0"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=0.4"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=0.4"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+negNodes[["tAfterBHMoreClimbMIRV=1"]] <- lapply(detNodes[["tAfterBHMoreClimbMIRV=1"]], function(nodes) setdiff(seq(nrow(y)), unlist(Descendants(tree, nodes)))) 
+# negNodes[["ancMIRV=0.4"]] <- lapply(detNodes[["ancMIRV=0.4"]], function(ta) { 
+#     setdiff(seq(nrow(y)),unlist(Descendants(tree, ta)))
+#     })
+negNodes[["treeClimbR"]] <- lapply(detNodes[["treeClimbR"]], function(det) setdiff(seq(nrow(y)), unlist(Descendants(tree, det))))
+negNodes[["rChild"]] <- lapply(seq(3), function(i) c())
+```
+
+#### Weighted logFC by infRV of logFC
+```{r}
+yL <- computeWeightedLFC(yAll, NULL)
+wLFC <- sapply(seq_along(detNodes), function(i) computeWeightedLFC(yL, c(detNodes[[i]][[3]], negNodes[[i]][[3]])))
+names(wLFC) <- names(detNodes)
+print(wLFC)
+```
+
+#### RMSD of logfc TPM
+```{r}
+wTPM <- sapply(seq_along(detNodes), function(i) computeDeseqInf(yAll, c(detNodes[[i]][[3]], negNodes[[i]][[3]])))
+names(wTPM) <- names(detNodes)
+print(wTPM)
+```
+
+#### RMSD of difference between true and estimated lFC
+```{r}
+infReps <- getInfReps(yAll)
+estLogFC <- getLog2FC(infReps, colData(yAll)[["condition"]])
+lfcDiff <- sapply(seq_along(detNodes), function(i) compLFCDiff(logFCNodes, estLogFC, c(detNodes[[i]][[3]], negNodes[[i]][[3]])))
+names(lfcDiff) <- names(detNodes)
+print(lfcDiff)
+```
+
+#### RMSD of difference between scaled TPMs weighted by infRV
+```{r}
+tpmDiff <- sapply(seq_along(detNodes), function(i) compMDist(yAll, c(detNodes[[i]][[3]], negNodes[[i]][[3]])))
+names(tpmDiff) <- names(detNodes)
+print(tpmDiff)
+```

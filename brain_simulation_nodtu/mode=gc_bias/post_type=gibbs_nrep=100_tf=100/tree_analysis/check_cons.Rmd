@@ -1,0 +1,119 @@
+---
+title: "Checking Quality of Consensus"
+author: "Noor Pratap Singh"
+date: "4/27/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(reshape))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+
+computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F) 
+{
+    infReps <- assays(y)[grep("infRep", assayNames(y))]
+    infReps <- abind::abind(as.list(infReps), along = 3)
+    infMean <- apply(infReps, 1:2, mean)
+    infVar <- apply(infReps, 1:2, var)
+    assays(y)[["mean"]] <- infMean
+    assays(y)[["variance"]] <- infVar
+    
+    InfRV <- pmax(infVar - infMean, 0)/(infMean + pc) + shift
+    if(rMean)
+        return(rowMeans(InfRV))
+    return(InfRV)
+}
+
+```
+
+#### Plotting distribution of InfRV  (Mean and Variance) across replicates stratified by depth
+```{r}
+infRVSamp <- computeInfRV(yAll)
+infRVSampMean <- rowMeans(infRVSamp)
+infRVSampVar <- rowVars(infRVSamp)
+depth <- node.depth(tree,2)
+modDep <- depth
+modDep[depth >=7] = 7
+
+dfMean <- data.frame(mean=infRVSampMean, var=infRVSampVar, depth = depth, modDep = depth) 
+dfMean[["modDep"]][dfMean[["modDep"]] > 6] = 7
+
+pL <- list()
+### Plotting mean of infRV across replicates
+for(i in seq(7)) {
+    dfR <- dfMean[dfMean[["modDep"]] == i, ]
+    pL[[i]] <- ggplot(dfR, aes(x=log10(mean))) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+
+### Plotting variance of infRV across replicates
+pL <- list()
+for(i in seq(7)) {
+    dfR <- dfMean[dfMean[["modDep"]] == i, ]
+    pL[[i]] <- ggplot(dfR, aes(x=log10(var))) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+
+### Plotting variance with uncertainty
+pL <- list()
+for(i in seq(7)) {
+    dfR <- dfMean[dfMean[["modDep"]] == i, ]
+    pL[[i]] <- ggplot(dfR, aes(x=log10(mean),y=log10(var))) +  geom_hex()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+
+```
+
+
+#### Sample level inferential uncertainty stratified by depth
+```{r}
+dfComb <- melt(infRVSamp, value.name = "infRV")
+dfComb <- cbind(dfComb, modDep = rep(dfMean[["modDep"]], 12))
+colnames(dfComb)[3] <- "mean"
+for(i in seq(7)) {
+    dfR <- dfComb[dfComb$modDep==i,]
+    print(ggplot(dfR, aes(x=log10(mean))) +  geom_histogram() +facet_wrap(vars(X2)))
+}
+
+for(i in seq(7)) {
+    dfR <- dfComb[dfComb$modDep==i,]
+    print(ggplot(dfR, aes(x=factor(X2), y=log10(mean))) +  geom_violin())
+}
+```
+
+#### NGenes
+```{r}
+nNodes <- nrow(y)+tree$Nnode
+desc <- Descendants(tree, seq(nNodes))
+nGenes <- rep(0, nNodes)
+nGenes[1:nrow(y)] <- 1
+nGenes[nrow(y)+1:tree$Nnode] <- unlist(mclapply(desc[nrow(y)+1:tree$Nnode], function(txps) length(unique(mapDf[rownames(y)[txps],1])), mc.cores=4))
+nGenes <- unlist(nGenes)
+
+df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
+pL <- list()
+for(i in seq(7)) {
+    dfR <- df[df[["modDep"]] == i, ]
+    if(i==7) {
+        print(sum(dfR[["nGenes"]] > 100))
+        dfR <- dfR[dfR[["nGenes"]] <= 100,]
+    }
+        
+    pL[[i]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+```

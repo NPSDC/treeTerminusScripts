@@ -1,0 +1,121 @@
+---
+title: "Correlation Trees"
+author: "Noor Pratap Singh"
+date: "4/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(ape))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(cluster))
+suppressPackageStartupMessages(library(fastcluster))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+```
+
+```{r}
+UPGMA <- function (D, method = "average", ...) 
+{
+    DD <- as.dist(D)
+    hc <- fastcluster::hclust(DD, method = method, ...)
+    result <- as.phylo(hc)
+    result <- reorder(result, "postorder")
+    result
+}
+
+computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F) 
+{
+    infReps <- assays(y)[grep("infRep", assayNames(y))]
+    infReps <- abind::abind(as.list(infReps), along = 3)
+    infMean <- apply(infReps, 1:2, mean)
+    infVar <- apply(infReps, 1:2, var)
+    assays(y)[["mean"]] <- infMean
+    assays(y)[["variance"]] <- infVar
+    
+    InfRV <- pmax(infVar - infMean, 0)/(infMean + pc) + shift
+    if(rMean)
+        return(rowMeans(InfRV))
+    return(InfRV)
+}
+```
+
+```{r}
+# yM <- y[rowSums(assays(y)[["counts"]])!=0,]
+# sf <- DESeq2::estimateSizeFactorsForMatrix(assays(yM)[["counts"]])
+# sCounts <- t(t(assays(yM)[["counts"]])/sf)
+# corTxps <- cor(t(sCounts))
+# corTxps <- as.dist(corTxps)
+# save(corTxps, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/corTxps.RData")
+# dd <- (1-corTxps)/2
+# rm(corTxps)
+# gc()
+# ###https://stat.ethz.ch/pipermail/r-devel/2017-June/074488.html
+# ###Fast distance euc_dist <- function(m) {mtm <- Matrix::tcrossprod(m); sq <- rowSums(m*m);  sqrt(outer(sq,sq,"+") - 2*mtm)}
+# 
+# trUPGMA <- UPGMA(dd)
+# save(trUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trUpgma.RData")
+```
+
+```{r}
+# temp <- mergeLeaves(trUPGMA, y)
+# trUPGMA <- temp[[1]]
+# yM <- temp[[2]]
+# save(yM, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yM.RData")
+
+# yA <- prepSwish(trUPGMA, yM)
+# save(yA, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yA.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trUpgma.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yM.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yA.RData")
+infRVCorr <- computeInfRV(yA)
+```
+
+#### Plotting distribution of InfRV  (Mean and Variance) across replicates stratified by depth
+```{r}
+infRVSampMean <- rowMeans(infRVCorr)
+infRVSampVar <- rowVars(infRVCorr)
+depth <- node.depth(trUPGMA,2)
+modDep <- depth
+modDep[depth >=7] = 7
+dfMean <- data.frame(mean=infRVSampMean, var=infRVSampVar, depth = depth, modDep = modDep)
+
+pL <- list()
+### Plotting mean of infRV across replicates
+for(i in seq(7)) {
+    dfR <- dfMean[dfMean[["modDep"]] == i, ]
+    pL[[i]] <- ggplot(dfR, aes(x=log10(mean))) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+```
+
+### Number of genes per level
+```{r}
+desc <- Descendants(trUPGMA, seq(nrow(yA)))
+nGenes <- rep(0, nrow(yA))
+nGenes[1:nrow(yM)] <- 1
+nGenes[nrow(yM)+1:trUPGMA$Nnode] <- unlist(mclapply(desc[nrow(yM)+1:trUPGMA$Nnode], function(txps) length(unique(mapDf[rownames(yM)[txps],1])), mc.cores=4))
+nGenes <- unlist(nGenes)
+df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
+pL <- list()
+for(i in seq(7)) {
+    dfR <- df[df[["modDep"]] == i, ]
+    if(i==7) {
+        print(sum(dfR[["nGenes"]] > 100))
+        dfR <- dfR[dfR[["nGenes"]] <= 100,]
+    }
+        
+    pL[[i]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+```

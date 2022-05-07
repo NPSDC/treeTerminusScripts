@@ -1,0 +1,104 @@
+---
+title: "Random tree"
+author: "Noor Pratap Singh"
+date: "4/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(ape))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(future.apply))
+
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+
+computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F) 
+{
+    infReps <- assays(y)[grep("infRep", assayNames(y))]
+    infReps <- abind::abind(as.list(infReps), along = 3)
+    infMean <- apply(infReps, 1:2, mean)
+    infVar <- apply(infReps, 1:2, var)
+    assays(y)[["mean"]] <- infMean
+    assays(y)[["variance"]] <- infVar
+    
+    InfRV <- pmax(infVar - infMean, 0)/(infMean + pc) + shift
+    if(rMean)
+        return(rowMeans(InfRV))
+    return(InfRV)
+}
+
+```
+
+#### Distribution of mean inferential variance by randomly arranging transcripts on the tree
+```{r}
+tr <- tree
+depth <- node.depth(tr,2)
+yR <- y
+tr$tip <- sample(tree$tip)
+yR <- yR[tr$tip,]
+yAgg <- prepSwish(tr, yR)
+
+infRVMean <- computeInfRV(yAgg, rMean=T)
+
+
+dfMean <- data.frame(mean=infRVMean, depth = depth, modDep = depth) 
+dfMean[["modDep"]][dfMean[["modDep"]] > 6] = 7
+
+pL <- list()
+for(i in seq(7)) {
+    dfR <- dfMean[dfMean[["modDep"]] == i, ]
+    pL[[i]] <- ggplot(dfR, aes(x=log10(mean))) +  geom_histogram()
+}
+ggarrange(plotlist=pL)
+
+ggplot(dfMean, aes(x=factor(modDep), y=log10(mean))) +  geom_violin()
+```
+
+#### Repeating the above experiment 100 times and taking mean across infRVs
+```{r}
+options(future.globals.maxSize = 50*1024^3) ##50 GBs
+n <- 10
+setRandSim <- function() {
+    tr <- tree
+    yR <- y
+    tr$tip <- sample(tree$tip)
+    yR <- yR[tr$tip,]
+    yAgg <- prepSwish(tr, yR)
+    infRVMean <- computeInfRV(yAgg, rMean=T)
+    dfMean <- data.frame(mean=infRVMean, depth = depth, modDep = depth) 
+    dfMean[["modDep"]][dfMean[["modDep"]] > 6] = 7
+    print(ggplot(dfMean, aes(x=factor(modDep), y=log10(mean))) +  geom_violin())
+    infRVMean <- infRVMean[rownames(yAll)]
+    infRVMean
+}
+infRVs <- mclapply(seq(n), function(i) setRandSim(), mc.cores=4)
+infRVs <- do.call(cbind, infRVs)
+print(head(infRVs))
+print(dim(infRVs))
+meanInfRVs <- rowMeans(infRVs)
+
+dfMean <- data.frame(mean=meanInfRVs, depth = depth, modDep = depth) 
+dfMean[["modDep"]][dfMean[["modDep"]] > 6] = 7
+
+pL <- list()
+for(i in seq(7)) {
+    dfR <- dfMean[dfMean[["modDep"]] == i, ]
+    pL[[i]] <- ggplot(dfR, aes(x=log10(mean))) +  geom_histogram()
+}
+ggarrange(plotlist=pL)
+
+ggplot(dfMean, aes(x=factor(modDep), y=log10(mean))) +  geom_violin()
+```
