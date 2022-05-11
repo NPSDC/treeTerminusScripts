@@ -207,7 +207,8 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
                               compPThresh = T, cSign = T, cores = 1, temp = T, file=NULL, minP = 0.70)
 {
     library(qvalue)
-    if(!corr %in% c("qvalue", "IHW", "BH"))
+    library(fdrtool)
+    if(!corr %in% c("qvalue", "IHW", "BH", "lfdr"))
         stop(paste("Invalid correction type entered, should be either qvalue or IHW", corr))
     if(!runType %in% c("a", "b"))
         stop(paste("Invalid IHW type entered, should be either a or b", ihwType))
@@ -228,8 +229,18 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
         else {
             if(corr == "qvalue")
                 resAlphas <- list(qvalue(mcols(y)[["pvalue"]]))
-            else
+            else if(corr == "BH")
                 resAlphas <- list(list(qvalues = p.adjust(mcols(y)[["pvalue"]], method="BH")))
+            else {
+                qvals <- rep(1, nrow(y))
+                pvals <- mcols(yAll)[["pvalue"]]
+                naInds <- is.na(pvals)
+                lfdr <- fdrtool(pvals[!naInds], statistic="pvalue")[["lfdr"]]
+                qvals[!naInds] <- lfdr
+                resAlphas <- list(list(qvalues = qvals))
+                
+            }
+        
             resDfs <- list(data.frame(pvalue=mcols(y)[["pvalue"]], adj_pvalue=resAlphas[[1]][["qvalues"]], inds = seq(nrow(y))))
         }
         nSol <- mclapply(seq_along(alphas), function(i) {
