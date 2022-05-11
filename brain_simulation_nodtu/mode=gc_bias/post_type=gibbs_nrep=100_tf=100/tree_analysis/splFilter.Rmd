@@ -1,0 +1,56 @@
+---
+title: "min sum SPL Cut"
+author: "Noor Pratap Singh"
+date: "5/9/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+```
+
+```{r}
+spl <- compSPL(yAll, i=1)
+```
+
+```{r}
+vals <- rep(-1000, length(spl))
+findOptSum <- function(tree, spl, node) {
+    if(node <= length(tree$tip)) {
+        vals[node] <<- spl[node]
+        return(spl[node])
+    }
+    children <- Descendants(tree, node, "child")
+    v <- min(spl[node], sum(sapply(children, function(child) findOptSum(tree, spl, child))))
+    vals[node] <<- v
+    return(v)
+}
+
+findCuts <- function(tree, vals, spl, node) {
+    if(vals[node] == spl[node])
+        return(node)
+    children <- Descendants(tree, node, "child")
+    return(unlist(sapply(children, function(child) findCuts(tree, vals, spl, child))))
+}
+children <- Descendants(tree, nrow(y)+1, "child")
+desc <- Descendants(tree, children)
+chInn <- children[children > nrow(y)]
+niRV <- sapply(children, function(child) findOptSum(tree, spl, child))
+
+cuts <- sapply(chInn, function(child) findCuts(tree, vals, spl, child))
+print(table(sapply(cuts, length)))
+
+print(sum(spl[unlist(cuts)] != vals[unlist(cuts)])) ### At all cuts spl is same as the optimized score, meaning that tree traversal is not much helpful for this case
+
+print(table(sapply(Descendants(tree, chInn, "child"), length))) ### Children at inner nodes
+
+```
+What should I be comparing against
