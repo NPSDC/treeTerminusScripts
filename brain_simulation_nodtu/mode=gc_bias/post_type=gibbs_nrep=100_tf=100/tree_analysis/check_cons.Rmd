@@ -82,27 +82,59 @@ ggarrange(plotlist=pL)
 #### Sample level inferential uncertainty stratified by depth
 ```{r}
 dfComb <- melt(infRVSamp, value.name = "infRV")
-dfComb <- cbind(dfComb, modDep = rep(dfMean[["modDep"]], 12))
-colnames(dfComb)[3] <- "mean"
-for(i in seq(7)) {
-    dfR <- dfComb[dfComb$modDep==i,]
-    print(ggplot(dfR, aes(x=log10(mean))) +  geom_histogram() +facet_wrap(vars(X2)))
-}
-
-for(i in seq(7)) {
-    dfR <- dfComb[dfComb$modDep==i,]
-    print(ggplot(dfR, aes(x=factor(X2), y=log10(mean))) +  geom_violin())
-}
+dfComb <- cbind(dfComb, modDep = rep(modDep, 12))
+colnames(dfComb)[3] <- "infRV"
+pL <- list()
+ggplot(dfComb, aes(x=log10(infRV))) + geom_histogram() + facet_wrap(vars(modDep))
+ggplot(dfComb, aes(x=factor(modDep), y=log10(infRV))) +  geom_violin()
 ```
+
+<!-- #### Extract sample level trees -->
+<!-- ```{r} -->
+<!-- termDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_temp" -->
+<!-- samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_"))) -->
+<!-- sampTFiles <- paste(termDir, samples, "group_nwk.txt",sep="/") -->
+
+<!-- trS <- lapply(sampTFiles, function(file) read.tree(file = file)) -->
+<!-- trMS <- list() ##Merged trees  -->
+<!-- infRVs <- mclapply(seq(12), function(i) { -->
+<!--     tr <- trS[[i]] -->
+<!--     trMS[[i]] <- mergeTree(tr, se=mapDf) -->
+<!--     yR <- y -->
+<!--     yR <- yR[tr$tip,i] -->
+<!--     yAgg <- prepSwish(tr, yR) -->
+<!--     infRV <- computeInfRV(yAgg[,1], rMean=F) -->
+<!--     }, mc.cores=4) -->
+<!-- save(infRVs, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/infRVTree.RData") -->
+<!-- save(trMS, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMS.RData") -->
+
+<!-- depthTr <- lapply(trMS, function(tr) node.depth(tr, 2)) -->
+<!-- depthTr <- lapply(depthTr, function(dep) { -->
+<!--     dep[dep >=7] <- 7 -->
+<!--     dep -->
+<!-- }) -->
+<!-- dfIndSamp <- data.frame(matrix(ncol=3, nrow=0)) -->
+<!-- colnames(dfIndSamp) <- c("infRV", "sample", "depth") -->
+<!-- for(i in seq(12)) { -->
+<!--     df <- data.frame(infRV = infRVs[[i]][,1], sample = rep(samples[i],length(infRVs[[i]])), depth = depthTr[[i]]) -->
+<!--     dfIndSamp <- rbind(dfIndSamp, df) -->
+<!-- } -->
+
+<!-- ggplot(dfIndSamp, aes(x = factor(depth), y=log10(infRV))) + geom_violin() -->
+<!-- ``` -->
 
 #### NGenes
 ```{r}
 nNodes <- nrow(y)+tree$Nnode
 desc <- Descendants(tree, seq(nNodes))
+genesL <- mclapply(desc[nrow(y)+1:tree$Nnode], function(txps) unique(mapDf[rownames(y)[txps],1]), mc.cores=4)
 nGenes <- rep(0, nNodes)
 nGenes[1:nrow(y)] <- 1
-nGenes[nrow(y)+1:tree$Nnode] <- unlist(mclapply(desc[nrow(y)+1:tree$Nnode], function(txps) length(unique(mapDf[rownames(y)[txps],1])), mc.cores=4))
-nGenes <- unlist(nGenes)
+nGenes[nrow(y)+1:tree$Nnode] <- sapply(genesL, length)
+
+depth <- node.depth(tree,2)
+modDep <- depth
+modDep[depth >=7] = 7
 
 df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
 pL <- list()
@@ -116,4 +148,26 @@ for(i in seq(7)) {
     pL[[i]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
 }
 ggarrange(plotlist=pL)
+```
+
+#### Gene Families
+```{r}
+library(biomaRt)
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+
+rGenes <- genesL[sapply(genesL, length)==58][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+
+rGenes <- genesL[sapply(genesL, length)==35][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+
+rGenes <- genesL[sapply(genesL, length)==25][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+
+rGenes <- genesL[sapply(genesL, length)==23][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
 ```

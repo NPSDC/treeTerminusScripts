@@ -50,6 +50,47 @@ computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F)
 }
 ```
 
+#### Creating anti-correlation trees
+```{r}
+infReps <- assays(y)[grep("infRep", assayNames(y))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+rInds <- which(rowSums(assays(y)[["counts"]]) == 0)
+tInds <- Reduce(union,tInds)
+tInds <- union(rInds, tInds)
+infReps <- infReps[-tInds,,]
+trCorUPGMA <- list()
+for(i in seq(12)) {
+    corTxps <- cor(t(infReps[,i,]))/2 ###Building on anticorrelation
+    dd <- (1-corTxps)/2
+    rm(corTxps)
+    gc()
+    dd <- 1-dd
+    trCorUPGMA[[i]] <- UPGMA(dd)    
+}
+
+save(trCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trCorUPGMA.RData")
+
+trCorUPGMA <- lapply(trCorUPGMA, function(tr) {
+    tr$tip.label <- match(tr$tip.label, rownames(mapDf))-1 ## 0 based
+    tr
+})
+nwks <- lapply(trCorUPGMA, function(tr) write.tree(tr))
+for(n in nwks)
+    write(n, file="/fs/cbcb-lab/rob/students/noor/Uncertainity/terminus/phylip_consensus/inp_tree.nwk",append=TRUE)
+
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/terminus/phylip_consensus')
+inpComm <- paste(c('echo inp_tree.nwk > input',
+            'echo "R Yes" >> input',
+            'echo "Y"  >> input'), sep="\n")
+system(inpComm)
+consComm <- './consense < input'
+system(consComm)
+# rm(corTxps)
+# gc()
+```
+
+### Correlation tree based on count
 ```{r}
 # yM <- y[rowSums(assays(y)[["counts"]])!=0,]
 # sf <- DESeq2::estimateSizeFactorsForMatrix(assays(yM)[["counts"]])
@@ -75,47 +116,47 @@ computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F)
 
 # yA <- prepSwish(trUPGMA, yM)
 # save(yA, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yA.RData")
-load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trUpgma.RData")
-load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yM.RData")
-load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yA.RData")
-infRVCorr <- computeInfRV(yA)
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trUpgma.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yM.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yA.RData")
+# infRVCorr <- computeInfRV(yA)
 ```
 
-#### Plotting distribution of InfRV  (Mean and Variance) across replicates stratified by depth
-```{r}
-infRVSampMean <- rowMeans(infRVCorr)
-infRVSampVar <- rowVars(infRVCorr)
-depth <- node.depth(trUPGMA,2)
-modDep <- depth
-modDep[depth >=7] = 7
-dfMean <- data.frame(mean=infRVSampMean, var=infRVSampVar, depth = depth, modDep = modDep)
+<!-- #### Plotting distribution of InfRV  (Mean and Variance) across replicates stratified by depth -->
+<!-- ```{r} -->
+<!-- infRVSampMean <- rowMeans(infRVCorr) -->
+<!-- infRVSampVar <- rowVars(infRVCorr) -->
+<!-- depth <- node.depth(trUPGMA,2) -->
+<!-- modDep <- depth -->
+<!-- modDep[depth >=7] = 7 -->
+<!-- dfMean <- data.frame(mean=infRVSampMean, var=infRVSampVar, depth = depth, modDep = modDep) -->
 
-pL <- list()
-### Plotting mean of infRV across replicates
-for(i in seq(7)) {
-    dfR <- dfMean[dfMean[["modDep"]] == i, ]
-    pL[[i]] <- ggplot(dfR, aes(x=log10(mean))) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
-}
-ggarrange(plotlist=pL)
-```
+<!-- pL <- list() -->
+<!-- ### Plotting mean of infRV across replicates -->
+<!-- for(i in seq(7)) { -->
+<!--     dfR <- dfMean[dfMean[["modDep"]] == i, ] -->
+<!--     pL[[i]] <- ggplot(dfR, aes(x=log10(mean))) +  geom_histogram()     #+facet_wrap(vars(modDep))  -->
+<!-- } -->
+<!-- ggarrange(plotlist=pL) -->
+<!-- ``` -->
 
-### Number of genes per level
-```{r}
-desc <- Descendants(trUPGMA, seq(nrow(yA)))
-nGenes <- rep(0, nrow(yA))
-nGenes[1:nrow(yM)] <- 1
-nGenes[nrow(yM)+1:trUPGMA$Nnode] <- unlist(mclapply(desc[nrow(yM)+1:trUPGMA$Nnode], function(txps) length(unique(mapDf[rownames(yM)[txps],1])), mc.cores=4))
-nGenes <- unlist(nGenes)
-df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
-pL <- list()
-for(i in seq(7)) {
-    dfR <- df[df[["modDep"]] == i, ]
-    if(i==7) {
-        print(sum(dfR[["nGenes"]] > 100))
-        dfR <- dfR[dfR[["nGenes"]] <= 100,]
-    }
-        
-    pL[[i]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
-}
-ggarrange(plotlist=pL)
-```
+<!-- ### Number of genes per level -->
+<!-- ```{r} -->
+<!-- desc <- Descendants(trUPGMA, seq(nrow(yA))) -->
+<!-- nGenes <- rep(0, nrow(yA)) -->
+<!-- nGenes[1:nrow(yM)] <- 1 -->
+<!-- nGenes[nrow(yM)+1:trUPGMA$Nnode] <- unlist(mclapply(desc[nrow(yM)+1:trUPGMA$Nnode], function(txps) length(unique(mapDf[rownames(yM)[txps],1])), mc.cores=4)) -->
+<!-- nGenes <- unlist(nGenes) -->
+<!-- df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth) -->
+<!-- pL <- list() -->
+<!-- for(i in seq(7)) { -->
+<!--     dfR <- df[df[["modDep"]] == i, ] -->
+<!--     if(i==7) { -->
+<!--         print(sum(dfR[["nGenes"]] > 100)) -->
+<!--         dfR <- dfR[dfR[["nGenes"]] <= 100,] -->
+<!--     } -->
+
+<!--     pL[[i]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep))  -->
+<!-- } -->
+<!-- ggarrange(plotlist=pL) -->
+<!-- ``` -->
