@@ -163,15 +163,30 @@ computeAggNodesU <- function(tree, nodeID, se_counts, group_inds = NULL) {
     }
     performColAgg <- function(counts, row_inds = NULL)
     {
-        if(is.null(dim(counts)))
-            stop("counts has to be matrix/dataframe")
-        if(is.null(row_inds))
-            return(counts)
+        # if(is.null(dim(counts)))
+        #   stop("counts has to be matrix/dataframe")
+        if(is.null(row_inds)) {
+          if(is.null(dim(counts)))
+            return(matrix(counts, nrow=length(counts), ncol=1))
+          return(counts)
+        }
+            
         if(is.null(names(row_inds)))
             stop("row indexes must be named")
+        
+        sInd <- F ###if not matrix then column sums
+        
+        if(dim(counts)[2] == 1)
+          sInd <- T
         df <- matrix(0, nrow = length(row_inds), ncol = ncol(counts))
-        for(i in seq_along(row_inds))
+        for(i in seq_along(row_inds)){
+     #     print(sInd)
+          if(!sInd)
             df[i,] <- colSums(counts[row_inds[[i]],])
+          else
+            df[i,] <- sum(counts[row_inds[[i]]])
+        }
+          
         rownames(df) <- names(row_inds)
         return(df)
     }
@@ -191,11 +206,17 @@ computeAggNodesU <- function(tree, nodeID, se_counts, group_inds = NULL) {
     lInds <- Descendants(tree, nodeID[innNodes], type = "tips")
     names(lInds) <- as.character(nodeID[innNodes])
     ls <- sapply(lInds, length)
+    #print(dim(se_counts[nodeID[leaves],]))
     
-    if(length(leaves) > 0)
-        mat <- rbind(mat, performColAgg(se_counts[nodeID[leaves],]))
-    if(length(innNodes) > 0)
-        mat <- rbind(mat, performColAgg(se_counts, lInds))
+    if(length(leaves) > 0) {
+      mat <- rbind(mat, performColAgg(se_counts[nodeID[leaves],]))
+    }
+    
+    if(length(innNodes) > 0) {
+      mat <- rbind(mat, performColAgg(se_counts, lInds))
+      #print("ss")
+    }
+        
     mat <- performRowAgg(mat, group_inds)       
   
     return(mat)
@@ -691,6 +712,8 @@ computeDeseqInf <- function(y, tNodes) {
   diff <- (mC2 - mC1)^2
   if(class(tNodes) == "list")
     tNodes <- c(tNodes[["candNodeO"]], tNodes[["negNodeO"]], tNodes[["naNodeO"]])
+  else
+    tNodes <- tNodes
   return(sqrt(mean(diff[tNodes])))
 }
 
@@ -728,6 +751,21 @@ computeWeightedLFC <- function(y, tNodes, type = "sum") {
   }
 }
 
+compLFCDiff <- function(tLFC, cLFC, tNode) {
+  return(sqrt(mean((tLFC[tNode] - cLFC[tNode])^2)))
+}
+
+compMDist <- function(y, tNodes) {
+  mIRV <- mcols(y)[["meanInfRV"]]
+  tpm <- assays(y)[["abundance"]]
+  sf <- DESeq2::estimateSizeFactorsForMatrix(tpm)
+  scaledTpm <- t(t(tpm)/sf)
+  mC1 <- rowMeans(scaledTpm[,colData(y)[["condition"]]==1]) ##mean condition 1
+  mC2 <- rowMeans(scaledTpm[,colData(y)[["condition"]]==2]) ##mean condition 2
+  dist=(mC1-mC2)^2/(mIRV)
+  return(sqrt(mean(dist[tNodes])))
+}
+
 convAllTreeTxp <- function(clusFile, txpInd=28288) {
   trees <- read.tree(clusFile)
   trees <- lapply(trees, function(tr) {
@@ -755,4 +793,13 @@ compTPM <- function(counts, effLen) {
     vals <- counts/effLen
     tpms <- 1e6*t(t(vals)/(colSums(vals)))
     return(tpms)
+}
+
+compSPL <- function(y, i, pc = 5) {
+  nodes <- seq(nrow(y))
+  infReps <- assays(y)[grep("infRep", assayNames(y))]
+  infReps <- abind::abind(as.list(infReps), along = 3)
+  infMean <- apply(infReps, 1:2, mean)
+  infVar <- apply(infReps, 1:2, var)
+  return(abs(infVar[,i]-infMean[,i])/(infMean[,i]+pc))
 }
