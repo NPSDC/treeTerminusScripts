@@ -15,42 +15,93 @@ load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
 suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
 ```
 
 ```{r}
 spl <- compSPL(yAll, i=1)
 ```
 
+### Get the individual trees not
 ```{r}
-vals <- rep(-1000, length(spl))
-findOptSum <- function(tree, spl, node) {
-    if(node <= length(tree$tip)) {
-        vals[node] <<- spl[node]
-        return(spl[node])
-    }
-    children <- Descendants(tree, node, "child")
-    v <- min(spl[node], sum(sapply(children, function(child) findOptSum(tree, spl, child))))
-    vals[node] <<- v
-    return(v)
-}
-
-findCuts <- function(tree, vals, spl, node) {
-    if(vals[node] == spl[node])
-        return(node)
-    children <- Descendants(tree, node, "child")
-    return(unlist(sapply(children, function(child) findCuts(tree, vals, spl, child))))
-}
+descNL <- sapply(Descendants(tree, seq(nrow(yAll))), length)
 children <- Descendants(tree, nrow(y)+1, "child")
 desc <- Descendants(tree, children)
 chInn <- children[children > nrow(y)]
+chL <- children[children <= nrow(y)]
+findOptSum(tree, spl, nrow(y)+1)
 niRV <- sapply(children, function(child) findOptSum(tree, spl, child))
-
 cuts <- sapply(chInn, function(child) findCuts(tree, vals, spl, child))
 print(table(sapply(cuts, length)))
 
-print(sum(spl[unlist(cuts)] != vals[unlist(cuts)])) ### At all cuts spl is same as the optimized score, meaning that tree traversal is not much helpful for this case
+print(vals[nrow(y)+1]) ### At root
+print(sum(sapply(children,function(child) spl[child]))) ### If the cut were individual children
 
-print(table(sapply(Descendants(tree, chInn, "child"), length))) ### Children at inner nodes
+cuts <- sapply(chInn, function(child) findCuts(tree, vals, spl, child))
+print(table(sapply(cuts, length)))
+print(sum(sapply(cuts,function(child) sum(vals[child])))) ### Optimal cut value
 
+
+#print(table(sapply(Descendants(tree, chInn, "child"), length))) ### Children at inner nodes
 ```
-What should I be comparing against
+
+```{r}
+v1 <- computeInfRV(yAll)
+m2v <- v1[["mean"]][,1]/(v1[["variance"]][,1]+0.01)
+globArr <- rep(-100, nrow(yAll))
+findMaxSum(tree, m2v, nrow(y)+1, globArr)
+mean2var <- globArr
+cutm2v <- findCuts(tree, mean2var, m2v, nrow(y)+1)
+cChild <- sapply(chInn, function(child) findCuts(tree, mean2var, m2v, child))
+print(table(sapply(cChild, length)))
+print(sum(m2v[children])) ##  Value at subtrees
+print(mean2var[nrow(y)+1]) ##Value at the cut
+```
+
+```{r}
+globArr <- rep(-100, nrow(yAll))
+e2infRv <- assays(yAll)[["counts"]][,1]/(v1[["infRV"]][,1])
+findMaxSum(tree, e2infRv, nrow(y)+1, globArr)
+eIRV <- globArr
+cutIRV <- findCuts(tree, eIRV, e2infRv, nrow(y)+1)
+cChild2 <- sapply(chInn, function(child) findCuts(tree, eIRV, e2infRv, child))
+print(table(sapply(cChild2, length)))
+
+print(sum(e2infRv[children])) ##Value at children
+print(eIRV[nrow(y)+1]) ##Value at the cut
+```
+
+#### Minimizing the metric
+```{r}
+globArr <- rep(-100, nrow(yAll))
+findOptSum(tree, spl, nrow(y)+1, descNL)
+mSPL <- globArr
+cutSPL <- findCuts(tree, mSPL, spl, nrow(y)+1, descNL)
+cChild2 <- sapply(chInn, function(child) findCuts(tree, mSPL, spl, child, descNL))
+table(sapply(cChild2, length))
+print(sum)
+```
+
+#### Maximizing the logFC
+```{r}
+infReps <- assays(yAll)[grep("infRep", assayNames(yAll))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAll)[["condition"]])
+lfcMet <- abs(lfc)/mcols(yAll)[["meanInfRV"]]
+globArr <- rep(-100, nrow(yAll))
+findMaxSum(tree, lfcMet, nrow(y)+1)
+optLfcMet <- globArr
+cChild3 <- sapply(chInn, function(child) findCuts(tree, optLfcMet, lfcMet, child))
+table(sapply(cChild3, length))
+```
+
+#### Agenda for tomorrow
+Also check the value of the summary statistic
+1) Check this by looking at the value of respective nodes (children)
+2) Think why taking mean of mean at individual nodes is not as good as root
+3) Compare with original terminus
+4) Run this procedure on original terminus
+5) Run the consensus step of original terminus
+6) Run the consensus step on new terminus
+7) Finish the weighted logFC implementation
+8) Repeat the above steps

@@ -19,7 +19,7 @@ suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(ggpubr))
 
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
-load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")2
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
 # load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trUpgma.RData")
