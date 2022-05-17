@@ -14,94 +14,85 @@ knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/tre
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
 suppressPackageStartupMessages(source("tree_helper_function.R"))
 suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+```
+
+#### Minimizing SPL
+```{r}
+treeNoThrDir <- "../brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_temp"
+treeThrDir <- "../brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_hirak"
+samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
+treeListNoThr <- file.path(treeNoThrDir, samples, "group_nwk.txt")
+treeListNoThr <- lapply(treeListNoThr, read.tree)
+
+treeListThr <- file.path(treeThrDir, samples, "group_nwk.txt")
+treeListThr <- lapply(treeListThr, read.tree)
+
+dfSPL <- data.frame(matrix(nrow=0, ncol=3)) ### spl, optSPL, sample
+colnames(dfSPL) <- c("spl", "optSPL", "sample")
+dfSPLComp <- data.frame(matrix(nrow=0, ncol=4)) ### tree_term_nothr, tree_term_no_term_group, transcripts
+colnames(dfSPLComp) <- c( "Sample", "TreeTerm_opt", "TreeTerm_groups", "Transcripts")
+bCuts <- list()
+
+for(i in seq_along(treeListNoThr)) {
+    print(i)
+    tr <- mergeTree(treeListNoThr[[i]], se = mapDf)
+    trThr <- mergeTree(treeListThr[[i]], se = mapDf)
+    txps <- union(tr$tip, trThr$tip)
+    yR <- y[txps,]
+    mB <- mergeLeaves(tr, yR)
+    yR <- mB[["ySwish"]]
+    tr <- mB[["tree"]]
+    yAgg <- prepSwish(tr, yR)
+    children <- Descendants(tr, nrow(yR)+1, "children")
+    print("Agg completed")
+    spl <- compSPL(yAgg, i=i, mv=F)
+    print("spl completed")
+    globArr <- rep(-100, nrow(yAgg))
+    lengths <- sapply(Descendants(tr, seq(nrow(yAgg))), length)
+    
+    optSPL <- findOptSum(tr, spl, nrow(yR)+1, lengths)
+    print("opt SPL completed")
+    bCuts[[i]] <- findCuts(tr, globArr, spl, nrow(yR)+1,lengths)
+    print("opt cuts found")
+    dfSPL <- rbind(dfSPL, data.frame(spl = spl, optSPL = globArr, sample = samples[i]))
+    dComp <- data.frame("Sample"=samples[i],"TreeTerm_opt"=sum(globArr[bCuts[[i]]]),
+                "TreeTerm_groups" = sum(spl[children]*lengths[children]),
+                "Transcripts" = sum(spl[1:nrow(yR)]))
+    
+    ### Hirak terminus
+    mB <- mergeLeaves(trThr, yR)
+    yR <- mB[["ySwish"]]
+    trThr <- mB[["tree"]]
+    
+    yAgg <- prepSwish(trThr, yR)
+    childrenThr <- Descendants(trThr, nrow(yR)+1, "children")
+    
+    spl <- compSPL(yAgg, i=i, mv=F)
+    print("spl completed")
+    globArr <- rep(-100, nrow(yAgg))
+    lengths <- sapply(Descendants(trThr, seq(nrow(yAgg))), length)
+    
+    optSPL <- findOptSum(trThr, spl, nrow(yR)+1, lengths)
+    print("opt SPL completed")
+    cs <- findCuts(trThr, globArr, spl, nrow(yR)+1,lengths)
+    print("opt cuts found")
+    
+    dComp <- cbind(dComp, data.frame("Term_opt"=sum(globArr[cs]),
+                "Term_groups" = sum(spl[childrenThr]*lengths[childrenThr])))
+    dfSPLComp <- rbind(dfSPLComp, dComp)
+}
+
+dfS <- reshape2::melt(dfSPLComp)
 ```
 
 ```{r}
-spl <- compSPL(yAll, i=1)
+ggplot(dfS, aes(x=variable, log10(value))) + geom_violin()
+save(dfSPLComp, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPLComp.RData")
+save(dfSPL, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPL.RData")
+save(bCuts, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/bCuts.RData")
 ```
-
-### Get the individual trees not
-```{r}
-descNL <- sapply(Descendants(tree, seq(nrow(yAll))), length)
-children <- Descendants(tree, nrow(y)+1, "child")
-desc <- Descendants(tree, children)
-chInn <- children[children > nrow(y)]
-chL <- children[children <= nrow(y)]
-findOptSum(tree, spl, nrow(y)+1)
-niRV <- sapply(children, function(child) findOptSum(tree, spl, child))
-cuts <- sapply(chInn, function(child) findCuts(tree, vals, spl, child))
-print(table(sapply(cuts, length)))
-
-print(vals[nrow(y)+1]) ### At root
-print(sum(sapply(children,function(child) spl[child]))) ### If the cut were individual children
-
-cuts <- sapply(chInn, function(child) findCuts(tree, vals, spl, child))
-print(table(sapply(cuts, length)))
-print(sum(sapply(cuts,function(child) sum(vals[child])))) ### Optimal cut value
-
-
-#print(table(sapply(Descendants(tree, chInn, "child"), length))) ### Children at inner nodes
-```
-
-```{r}
-v1 <- computeInfRV(yAll)
-m2v <- v1[["mean"]][,1]/(v1[["variance"]][,1]+0.01)
-globArr <- rep(-100, nrow(yAll))
-findMaxSum(tree, m2v, nrow(y)+1, globArr)
-mean2var <- globArr
-cutm2v <- findCuts(tree, mean2var, m2v, nrow(y)+1)
-cChild <- sapply(chInn, function(child) findCuts(tree, mean2var, m2v, child))
-print(table(sapply(cChild, length)))
-print(sum(m2v[children])) ##  Value at subtrees
-print(mean2var[nrow(y)+1]) ##Value at the cut
-```
-
-```{r}
-globArr <- rep(-100, nrow(yAll))
-e2infRv <- assays(yAll)[["counts"]][,1]/(v1[["infRV"]][,1])
-findMaxSum(tree, e2infRv, nrow(y)+1, globArr)
-eIRV <- globArr
-cutIRV <- findCuts(tree, eIRV, e2infRv, nrow(y)+1)
-cChild2 <- sapply(chInn, function(child) findCuts(tree, eIRV, e2infRv, child))
-print(table(sapply(cChild2, length)))
-
-print(sum(e2infRv[children])) ##Value at children
-print(eIRV[nrow(y)+1]) ##Value at the cut
-```
-
-#### Minimizing the metric
-```{r}
-globArr <- rep(-100, nrow(yAll))
-findOptSum(tree, spl, nrow(y)+1, descNL)
-mSPL <- globArr
-cutSPL <- findCuts(tree, mSPL, spl, nrow(y)+1, descNL)
-cChild2 <- sapply(chInn, function(child) findCuts(tree, mSPL, spl, child, descNL))
-table(sapply(cChild2, length))
-print(sum)
-```
-
-#### Maximizing the logFC
-```{r}
-infReps <- assays(yAll)[grep("infRep", assayNames(yAll))]
-infReps <- abind::abind(as.list(infReps), along = 3)
-lfc <- getLog2FC(infReps, colData(yAll)[["condition"]])
-lfcMet <- abs(lfc)/mcols(yAll)[["meanInfRV"]]
-globArr <- rep(-100, nrow(yAll))
-findMaxSum(tree, lfcMet, nrow(y)+1)
-optLfcMet <- globArr
-cChild3 <- sapply(chInn, function(child) findCuts(tree, optLfcMet, lfcMet, child))
-table(sapply(cChild3, length))
-```
-
-#### Agenda for tomorrow
-Also check the value of the summary statistic
-1) Check this by looking at the value of respective nodes (children)
-2) Think why taking mean of mean at individual nodes is not as good as root
-3) Compare with original terminus
-4) Run this procedure on original terminus
-5) Run the consensus step of original terminus
-6) Run the consensus step on new terminus
-7) Finish the weighted logFC implementation
-8) Repeat the above steps

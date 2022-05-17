@@ -22,7 +22,7 @@ suppressPackageStartupMessages(library(fastcluster))
 suppressPackageStartupMessages(library(HDF5Array))
 suppressPackageStartupMessages(library(BiocParallel))
 suppressPackageStartupMessages(source("tree_helper_function.R"))
-load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
 
 tempdir <- "/fs/cbcb-lab/rob/students/noor/RTemp"
@@ -86,42 +86,65 @@ colMin2 <- function(M, arr, nchunks=10) {
         }
         
     }
+}
 
+cMean <- function(M, arr, nchunks=10) {
+    ###https://stackoverflow.com/questions/2434833/how-can-i-partition-a-vector
+    slice<-function(x,n) {
+        N<-length(x);
+        lapply(seq(1,N,n),function(i) x[i:min(i+n-1,N)])
+    }
+    ntxps <- nrow(M[[1]])
+    sl <- slice(1:ntxps, nchunks)
+    D <- matrix(0, ncol = ntxps, nrow = length(M))
+
+    for(k in seq_along(sl)){
+        mats <- lapply(seq_along(M), function(i) realize(M[[i]][sl[[k]],]))
+        for(j in seq_along(sl[[k]])){
+            for(i in seq(M)) {
+                D[i,] <- mats[[i]][j,]
+            }
+            arr[sl[[k]][j],] <<- (1+colMeans(D))/2
+        }
+    }
 }
 ```
 
 #### Creating anti-correlation trees
 ```{r}
-infReps <- assays(y)[grep("infRep", assayNames(y))]
-infReps <- abind::abind(as.list(infReps), along = 3)
-tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
-rInds <- which(rowSums(assays(y)[["counts"]]) == 0)
-tInds <- Reduce(union,tInds)
-tInds <- union(rInds, tInds)
-infReps <- infReps[-tInds,,]
-#trCorUPGMA <- list()
+# infReps <- assays(y)[grep("infRep", assayNames(y))]
+# infReps <- abind::abind(as.list(infReps), along = 3)
+# tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+# rInds <- which(rowSums(assays(y)[["counts"]]) == 0)
+# tInds <- Reduce(union,tInds)
+# tInds <- union(rInds, tInds)
+# infReps <- infReps[-tInds,,]
+# #trCorUPGMA <- list()
+# 
+# corMats <- list()
+# for(i in seq(12)) {
+#     corTxps <- cor(t(infReps[,i,]))
+# 
+#     ###Building on anticorrelation
+#     #corTxps <- (1-corTxps)/2
+#     setHDF5DumpFile(paste(tempdir, paste(paste("cor",i,sep="_"),"hd5",sep="."), sep="/"))
+#     setHDF5DumpName(paste("cor",i,sep="_"))
+#     setHDF5DumpChunkShape("last-dim-grows-first")
+#     setHDF5DumpChunkLength(nrow(corTxps))
+#     corMats[[i]] <- as(corTxps, "HDF5Array")
+#     rm(corTxps)
+#     gc()
+#     # dd <- 1-dd
+#     # trCorUPGMA[[i]] <- UPGMA(dd)
+# }
+# 
+# arr <- matrix(0, dim(corMats[[1]])[1], dim(corMats[[1]])[1])
+# colMin2(corMats, arr, 1000)
+# writeHDF5Array(arr, filepath="../../RTemp/min_cor_dist.hd5", name="min_cor_dist")
+# arr <- h5mread(filepath="../../RTemp/min_cor_dist.hd5", name="min_cor_dist")
+# trMinCorUPGMA <- UPGMA(arr)
+# save(trMinCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMinCorUPGMA.RData")
 
-corMats <- list()
-for(i in seq(12)) {
-    corTxps <- cor(t(infReps[,i,]))
-    
-    ###Building on anticorrelation
-    #corTxps <- (1-corTxps)/2
-    setHDF5DumpFile(paste(tempdir, paste(paste("cor",i,sep="_"),"hd5",sep="."), sep="/"))
-    setHDF5DumpName(paste("cor",i,sep="_"))
-    setHDF5DumpChunkShape("last-dim-grows-first")
-    setHDF5DumpChunkLength(nrow(corTxps))
-    corMats[[i]] <- as(corTxps, "HDF5Array")
-    rm(corTxps)
-    gc()
-    # dd <- 1-dd
-    # trCorUPGMA[[i]] <- UPGMA(dd)    
-}
-
-arr <- matrix(0, dim(corMats[[1]])[1], dim(corMats[[1]])[1])
-colMin2(corMats, arr, 1000)
-writeHDF5Array(arr, filepath="../../RTemp/min_cor_dist.hd5", name="min_cor_dist")
-# save(trCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trCorUPGMA.RData")
 # 
 # trCorUPGMA <- lapply(trCorUPGMA, function(tr) {
 #     tr$tip.label <- match(tr$tip.label, rownames(mapDf))-1 ## 0 based
@@ -142,12 +165,19 @@ writeHDF5Array(arr, filepath="../../RTemp/min_cor_dist.hd5", name="min_cor_dist"
 # gc()
 ```
 
+### Loading correlation matrix
 ```{r}
+corMats <- list()
 for(i in seq(12)) {
     file <- paste(tempdir, paste(paste("cor",i,sep="_"),"hd5",sep="."), sep="/")
     name <- paste("cor",i,sep="_")
     corMats[[i]] <- HDF5Array(filepath=file, name=name)
 }
+arr <- matrix(0, dim(corMats[[1]])[1], dim(corMats[[1]])[1])
+cMean(corMats, arr, 5000)
+writeHDF5Array(arr, filepath="../../RTemp/mean_cor_dist.hd5", name="mean_cor_dist")
+trMeanCorUPGMA <- UPGMA(arr)
+save(trMeanCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCorUPGMA.RData")
 ```
 
 ### Correlation tree based on count
