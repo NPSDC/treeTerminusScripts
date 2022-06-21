@@ -1,0 +1,74 @@
+---
+title: "Comp Different trees"
+author: "Noor Pratap Singh"
+date: "5/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(ape))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
+
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yAgg.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yNS.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trMCorUPGMA.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/yCorMeanAggS.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/dfInfRV.RData")
+```
+
+#### Building infRV data frame
+```{r}
+# depth <- node.depth(tree,2)
+# modDep <- depth
+# modDep[depth >=7] = 7
+# 
+# dfInfRV <- data.frame(infRV = mcols(yAgg)[["meanInfRV"]], depth = depth, modDep = modDep, type = "Consensus")
+
+### Anticorrelation trees
+# depth <- node.depth(trMeanCorUPGMA,2)
+# modDep <- depth
+# modDep[depth >=7] = 7
+# dfInfRV <- rbind(dfInfRV, data.frame(infRV = mcols(yCorMeanAggS)[["meanInfRV"]], depth = depth, modDep = modDep, type = "Anti-Correlation"))
+
+### Random tree
+# for(i in seq(20)) {
+#     tr <- tree
+#     depth <- node.depth(tr,2)
+#     yR <- yNS
+#     modDep <- depth
+#     modDep[depth >=7] = 7
+#     tr$tip.label <- sample(tree$tip.label)
+#     yR <- yR[tr$tip,]
+#     yAg <- prepSwish(tr, yR)
+# 
+#     yAg <- fishpond::computeInfRV(yAg, meanVariance=F)
+#     dfInfRV <- rbind(dfInfRV, data.frame(infRV = mcols(yAg)[["meanInfRV"]], depth = depth, modDep = modDep, type = "Random"))
+# }
+# save(dfInfRV, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/dfInfRV.RData")
+
+
+### Level Wise comparison
+dfInfRV %>% filter(depth!=1) %>% ggplot(aes(x=factor(type), y=log2(infRV))) + geom_violin() + facet_wrap(vars(modDep))
+
+phist <- list()
+for(i in c(2:7)) {
+    dfR <- dfInfRV[dfInfRV$modDep==i,]
+    dfR <- dfR %>% filter(type!="Random")
+    phist[[i-1]] <- ggplot(dfR, aes(x=log2(infRV))) + geom_histogram() + facet_wrap(vars(type))
+}
+ggarrange(plotlist=phist)
+```

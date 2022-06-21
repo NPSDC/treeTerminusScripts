@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yNS.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+tr_old_term <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_hirak/1_1/group_nwk.txt")
+tr_term <- read.tree("/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_temp/1_1/group_nwk.txt")
+```
+
+
+```{r}
+getRedInfRV <- function(tr, y, mapDf=NULL, cores = 4, sum=F) {
+    tr <- mergeTree(tr, se=mapDf)    
+    if(is.null(mapDf))
+        stop("MapDf cant be NULL")
+    
+    y <- y[tr$tip,]
+    yA <- prepSwish(tr, y)
+    yA <- computeInfRV(yA, meanVariance=F)
+    print(head(mcols(yA)))   
+    innNodes <- length(tr$tip)+2:tr$Nnode
+    netRedIRV <- 0
+    childNodes <- Descendants(tr, innNodes, "child")
+    if(class(childNodes)!="list")
+        childNodes <- list(childNodes)
+    
+    redIRV <- unlist(mclapply(seq_along(innNodes), function(n) mcols(yA)[innNodes[n], "meanInfRV"] - mean(mcols(yA)[childNodes[[n]], "meanInfRV"]), mc.cores = cores))
+    if(sum)
+        redIRV <- sum(redIRV)
+    return(list(r=redIRV, tr=tr, yA=yA))
+}
+
+```
+
+
+```{r}
+redOldTerm <- getRedInfRV(tr_old_term, yNS, mapDf)
+redNewTerm <- getRedInfRV(tr_term, yNS, mapDf)
+```
+
+```{r}
+par(mfrow=c(2,2))
+print(summary(redOldTerm[[1]]))
+print(summary(redNewTerm[[1]]))
+
+print(mean(redOldTerm[[1]] > 0))
+rOld <- redOldTerm[[1]][redOldTerm[[1]] < 0]
+plot(density(log10(-rOld)))
+hist(log2(-rOld))
+
+print(mean(redNewTerm[[1]] > 0))
+rNew <- redNewTerm[[1]][redNewTerm[[1]] < 0]
+plot(density(log10(-rNew)))
+hist(log2(-rNew))
+```
+
+```{r}
+trOld <- redOldTerm[[2]]
+trNew <- redNewTerm[[2]]
+redOld <- redOldTerm[[1]]
+redNew <- redNewTerm[[1]]
+
+chOld <- Descendants(trOld, length(trOld$tip)+1, "child")
+descTxp <- sapply(Descendants(trOld, chOld), function(n) trOld$tip[n][1])
+descTxp <- descTxp[!is.na(match(descTxp, trNew$tip))]
+ancTxpOld <- Ancestors(trOld, match(descTxp, trOld$tip))
+ancTxpOld <- sapply(ancTxpOld, function(anc) anc[length(anc)-1])
+descTxpOld <- Descendants(trOld, ancTxpOld)
+descTxpOld <- lapply(descTxpOld, function(n) trOld$tip[n])
+
+ancTxpNew <- Ancestors(trNew, match(descTxp, trNew$tip))
+ancTxpNew <- sapply(ancTxpNew, function(anc) anc[length(anc)-1])
+
+descTxpNew <- Descendants(trNew, ancTxpNew)
+descTxpNew <- lapply(descTxpNew, function(n) trNew$tip[n])
+sapply(descTxpNew, length)
+
+lInds <- which(sapply(descTxpNew, length)<=3)
+
+mInds <- sapply(seq_along(descTxpNew), function(i) sum(!descTxpOld[[i]] %in% descTxpNew[[i]]) == 0)
+print(sum(!mInds))
+mInds <- which(!mInds)
+
+rInds <- c(lInds, mInds)
+remInds <- setdiff(seq_along(descTxpNew), rInds)
+
+depthOld <- node.depth(trOld, 2)
+depthNew <- node.depth(trNew, 2)
+``` 
+
+```{r}
+pairs <- list()
+j <- 1
+for(i in remInds) {
+    dNew <- depthNew[ancTxpNew[i]]
+    dOld <- depthOld[ancTxpOld[i]]
+    if(dNew > dOld) {
+        or <- redOld[ancTxpOld[i] - length(trOld$tip) - 1] ##old red
+        descNodes <- c(ancTxpNew[i],Descendants(trNew, ancTxpNew[i], "all")) ## new
+        descNodes <- descNodes[depthNew[descNodes] > dOld]
+        dUp <- descNodes - length(trNew$tip) - 1
+        if(length(descNodes) > 0) {
+            inds <- which(redNew[dUp] < or)
+            #print(inds)
+            if(length(inds) > 0) {
+                pairs[[j]] <- c(i, descNodes[sort(inds)[1]], depthNew[descNodes[sort(inds)[1]]])
+                j <- j + 1
+            }
+        }
+    }
+}
+```
+
+```{r}
+descTNew <- sapply(seq_along(pairs), function(i) trNew$tip[Descendants(trNew,pairs[[i]][[2]])[[1]]])
+oInds <- sapply(pairs, function(p) p[1])
+uInds <- oInds[sapply(seq_along(oInds), function(i) sum(!descTxpOld[[oInds[i]]] %in% descTNew[[i]])==0)]
+pairs <- pairs[sapply(seq_along(oInds), function(i) sum(!descTxpOld[[oInds[i]]] %in% descTNew[[i]])==0)]
+
+depthDiff <- c()
+mIRVDiff <- c()
+for(i in seq_along(uInds)) {
+    ancO <- ancTxpOld[pairs[[i]][1]]
+    ancN <- pairs[[i]][2]
+    mIRVDiff <- c(mIRVDiff,redOld[ancO-length(trOld$tip)-1] - redNew[ancN-length(trNew$tip)-1])
+    depthDiff <- c(depthDiff, pairs[[i]][3] - depthOld[[ancO]])
+}
+hist(log2(mIRVDiff))
+```

@@ -1,0 +1,157 @@
+---
+title: "Checking Quality of Consensus"
+author: "Noor Pratap Singh"
+date: "4/27/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+suppressPackageStartupMessages(library(fishpond))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(reshape))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yAgg.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yNS.RData")
+
+computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F) 
+{
+    infReps <- assays(y)[grep("infRep", assayNames(y))]
+    infReps <- abind::abind(as.list(infReps), along = 3)
+    infMean <- apply(infReps, 1:2, mean)
+    infVar <- apply(infReps, 1:2, var)
+    assays(y)[["mean"]] <- infMean
+    assays(y)[["variance"]] <- infVar
+    
+    InfRV <- pmax(infVar - infMean, 0)/(infMean + pc) + shift
+    if(rMean)
+        return(rowMeans(InfRV))
+    return(InfRV)
+}
+
+```
+
+#### Plotting distribution of InfRV  (Mean and Variance) across replicates stratified by depth
+```{r}
+yAggNS <- prepSwish(tree, yNS)
+infRVSamp <- computeInfRV(yAggNS)
+```
+
+#### Extract sample level trees
+```{r}
+# termDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_temp"
+# samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
+# sampTFiles <- paste(termDir, samples, "group_nwk.txt",sep="/")
+# 
+# trS <- lapply(sampTFiles, function(file) read.tree(file = file))
+# trMS <- lapply(seq(12), function(i) {
+#     tr <- trS[[i]]
+#     tr <- mergeTree(tr, se=mapDf)
+# })
+# 
+# ##Merged trees
+# infRVs <- list()
+# for(i in seq(12)) {
+#     print(i)
+#     tr <- trMS[[i]]  
+#     yR <- yNS[,i]
+#     yR <- yR[tr$tip,]
+#     yAgg <- prepSwish(tr, yR)
+#     infRVs[[i]] <- computeInfRV(yAgg[,1], rMean=T)
+# }
+# 
+# save(infRVs, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/infRVTree.RData")
+# save(trMS, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trMS.RData")
+
+```
+
+#### Constructing one unified data frame
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/infRVTree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trMS.RData")
+### Mean Consensus
+depth <- node.depth(tree,2)
+modDep <- depth
+modDep[depth >=7] = 7
+dfInfRV <- data.frame(infRV = rowMeans(infRVSamp), sample="all", depth = modDep, type = "consMean")
+
+### Consensus tree across samples
+for(i in seq(12)) {
+    dfInfRV <- rbind(dfInfRV, data.frame(infRV = infRVSamp[,i], sample=colnames(yNS)[i], depth = modDep, type = "consInd"))
+}
+
+### Individual Sample trees
+for(i in seq(12)) {
+    depth <- node.depth(trMS[[i]], 2)
+    depth[depth > 6] = 7
+    dfInfRV <- rbind(dfInfRV, data.frame(infRV = infRVs[[i]], 
+            sample=colnames(yNS)[i], depth = depth, type = "treeInd"))
+}
+
+ggplot(dfInfRV, aes(x=factor(type), y=log10(infRV))) + geom_violin() + facet_wrap(vars(depth))
+
+for(i in seq(7)) {
+    dfR <- dfInfRV[dfInfRV[["depth"]]==i,]
+    print(ggplot(dfR, aes(x=log10(infRV))) + geom_histogram() + facet_wrap(vars(factor(type))))
+}
+```
+
+#### NGenes
+```{r}
+nNodes <- nrow(yNS)+tree$Nnode
+desc <- Descendants(tree, seq(nNodes))
+genesL <- mclapply(desc[nrow(yNS)+1:tree$Nnode], function(txps) unique(mapDf[rownames(yNS)[txps],1]), mc.cores=4)
+save(genesL, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/genesL.RData")
+nGenes <- rep(0, nNodes)
+nGenes[1:nrow(yNS)] <- 1
+nGenes[nrow(yNS)+1:tree$Nnode] <- sapply(genesL, length)
+
+depth <- node.depth(tree,2)
+modDep <- depth
+modDep[depth >=7] = 7
+
+df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
+pL <- list()
+for(i in seq(7)) {
+    dfR <- df[df[["modDep"]] == i, ]
+    if(i==7) {
+        print(sum(dfR[["nGenes"]] > 100))
+        dfR <- dfR[dfR[["nGenes"]] <= 100,]
+    }
+    if(i > 1)    
+        pL[[i-1]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
+}
+ggarrange(plotlist=pL)
+```
+
+#### Gene Families
+```{r}
+library(biomaRt)
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+
+rGenes <- genesL[sapply(genesL, length)==58][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+
+rGenes <- genesL[sapply(genesL, length)==35][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+
+rGenes <- genesL[sapply(genesL, length)==25][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+
+rGenes <- genesL[sapply(genesL, length)==23][[1]]
+rGenes <- gsub("\\.[0-9]+", "", rGenes)
+print(getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "description"), filters="ensembl_gene_id", values=rGenes, mart=ensembl))
+```

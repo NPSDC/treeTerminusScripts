@@ -1,0 +1,116 @@
+---
+title: "WeightedlogFC"
+author: "Noor Pratap Singh"
+date: "5/15/2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yAgg.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yNS.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yS.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
+suppressPackageStartupMessages(source("old_terminus_helper.R"))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+```
+
+#### Weighted LFC on consensus trees
+```{r}
+treeTermCons <- "../brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_temp/1_1/clusters.txt"
+termCons <- "../brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_hirak/1_1/clusters.txt"
+treeConsThr <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/out_term_hirak/cluster_nwk.txt"
+dfLFC <- matrix(nrow=0, ncol=7) ## TreeTerm Opt, TreeTerm Group, TreeTerm Cons, Term Opt, Term Group, Term Cons, Transcript 
+```
+
+#### Weighted LFC on treeTerminus
+```{r}
+infReps <- assays(yAgg)[grep("infRep", assayNames(yAgg))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAgg)[["condition"]])
+
+lfcMet <- abs(lfc/mcols(yAgg)[["meanInfRV"]])
+globArr <- rep(-100, nrow(yAgg))
+findMaxSum(tree, lfcMet, nrow(yNS)+1)
+optLfcMet <- globArr
+# cChild <- sapply(chInn, function(child) findCuts(tree, optLfcMet, lfcMet, child))
+# table(sapply(cChild, length))
+
+dfLFC <- data.frame(treeTermOpt = optLfcMet[nrow(yNS)+1], 
+                    treeTermGroup = sum(lfcMet[Descendants(tree, nrow(yNS)+1, "child")]),
+                    transcripts = sum(lfcMet[1:nrow(yNS)]))
+```
+
+#### Weighted LFC on consensus of terminus
+```{r}
+trees <- read.tree(treeConsThr)
+treeThr <- mergeTree(trees, se = mapDf)
+mB <- mergeLeaves(treeThr, yNS)
+treeThr <- mB[["tree"]]
+yR <- mB[["ySwish"]]
+yNSAg <- prepSwish(treeThr, yR)
+yNSAg <- fishpond::computeInfRV(yNSAg, meanVariance=F)
+yAg <- prepSwish(treeThr, yS[rownames(yR),])
+mcols(yAg)[["meanInfRV"]] <- mcols(yNSAg)[["meanInfRV"]]
+
+infReps <- assays(yAg)[grep("infRep", assayNames(yAg))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAg)[["condition"]])
+
+lfcMet <- abs(lfc/mcols(yAg)[["meanInfRV"]])
+globArr <- rep(-100, nrow(yAg))
+
+findMaxSum(treeThr, lfcMet, nrow(yNS)+1)
+optLfcMet <- globArr
+
+dfLFC <- cbind(dfLFC, data.frame(termOpt = optLfcMet[nrow(yNS)+1], 
+                    termGroup = sum(lfcMet[Descendants(treeThr, nrow(yNS)+1, "child")])))
+```
+
+#### Weighted LFC on consensus of terminus
+```{r}
+groups <- parseClustFile(termCons, yNS)
+mtxps <- setdiff(seq(nrow(yNS)), unlist(groups))
+
+mInds <- c(mtxps, nrow(yNS) + 1:length(groups))
+yAllOT <- prepOSwish(yNS, mInds, groups)
+yAllOT <- fishpond::computeInfRV(yAllOT, meanVariance=F)
+ySAllOT <- prepOSwish(yS, mInds, groups) ###Scaled
+mcols(ySAllOT)[["meanInfRV"]] <- mcols(yAllOT)[["meanInfRV"]]
+#rownames(yAllOT)[length(mtxps)+1:length(groups)] <- paste("Group", seq_along(groups), sep="_")
+
+infReps <- assays(ySAllOT)[grep("infRep", assayNames(ySAllOT))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(ySAllOT)[["condition"]])
+
+lfcMet <- abs(lfc)/mcols(ySAllOT)[["meanInfRV"]]
+dfLFC <- cbind(dfLFC, data.frame(TermCons = sum(lfcMet)))
+```
+
+#### Consensus Cluster on entire terminus
+```{r}
+groups <- parseClustFile(treeTermCons, yNS)
+mtxps <- setdiff(seq(nrow(yNS)), unlist(groups))
+
+mInds <- c(mtxps, nrow(yNS) + 1:length(groups))
+yAllOT <- prepOSwish(yNS, mInds, groups)
+yAllOT <- fishpond::computeInfRV(yAllOT, meanVariance=F)
+ySAllOT <- prepOSwish(yS, mInds, groups)
+mcols(ySAllOT)[["meanInfRV"]] <- mcols(yAllOT)[["meanInfRV"]]
+
+infReps <- assays(ySAllOT)[grep("infRep", assayNames(ySAllOT))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(ySAllOT)[["condition"]])
+lfcMet <- abs(lfc)/mcols(ySAllOT)[["meanInfRV"]]
+dfLFC <- cbind(dfLFC, data.frame(TreeTermCons = sum(lfcMet)))
+print(dfLFC)
+```

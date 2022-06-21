@@ -1,0 +1,87 @@
+---
+title: "Correlation"
+author: "Noor Pratap Singh"
+date: "6/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(library(ggplot2))
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yNS.RData")
+trueCountsDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/reads_fastq"
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/treeThrCuts_mv.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/treeNoThrCuts_mv.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trNThrList_mv.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trThrList_mv.RData")
+
+trueCountsDf <- lapply(seq(12), function(i) {
+    samp <- ifelse(i<=6,i,i-6)
+    rep <- ifelse(i<=6,1,2)
+    file <- file.path(trueCountsDir, samp, paste(paste("true_counts", rep,sep="_"),"tsv",sep="."))
+    df <- read.delim(file, row.names = 1)
+})
+
+comp_mard <- function(x, y, cutoff = 0.01) {
+    if(length(x) != length(y))
+        stop(paste(length(x), length(y)))
+    relDiff <- rep(0, length(x))
+    zInds <- which(x <= cutoff & y <= cutoff)
+    nzInds <- setdiff(seq_along(x), zInds)
+    relDiff[nzInds] <- abs(x[nzInds] - y[nzInds])/(x[nzInds] + y[nzInds])
+    return(mean(relDiff))
+}
+dfCor <- data.frame(matrix(nrow=0,ncol=9))
+dfMard <- data.frame(matrix(nrow=0,ncol=5))
+colnames(dfMard) <- c("Sample", "Transcripts", "Term_Groups", "treeTerm_Groups", "treeTerm_Opt")
+colnames(dfCor) <- c("Sample", "Transcripts", "len_txps", "Term_Groups", "len_Term", "treeTerm_Groups", "len_treeTerm_Group", "treeTerm_Opt", "len_treeTerm_Opt")
+for(i in seq(12)) {
+    txps <- trThrList[[i]]$tip
+    
+    tCounts <- trueCountsDf[[i]]
+    mtnames <- setdiff(txps, rownames(tCounts))
+    print(length(setdiff(rownames(tCounts), txps)))
+    tCounts <- rbind(tCounts, data.frame(Counts=rep(0,length(mtnames)), row.names = mtnames))
+    tCounts <- tCounts[txps,,drop=F]
+    yR <- yNS[txps,]
+    df <- data.frame(Sample=i, Transcripts=cor(assays(yNS)[["counts"]][txps,i], tCounts[txps,"Counts"], method="spearman"), "len_txps" = length(txps))
+    dfM <- data.frame(Sample=i, Transcripts=comp_mard(assays(yNS)[["counts"]][txps,i], tCounts[txps,"Counts"]))
+        
+    yTermThr <- computeAggNodesU(tree=trThrList[[i]], nodeID=c(1:length(txps),length(txps)+1:trThrList[[i]]$Nnode), se_counts=assays(yNS)[["counts"]][txps,])[,i]
+    yTrue <-  computeAggNodesU(tree=trThrList[[i]], nodeID=c(1:length(txps),length(txps)+1:trThrList[[i]]$Nnode), se_counts=cbind(tCounts[txps,], tCounts[txps,]))[,1]
+    childrenThr <- Descendants(trThrList[[i]], length(txps)+1, "children")
+    df <- data.frame(df, cbind("Term_Group" = cor(yTermThr[childrenThr], yTrue[childrenThr], method = "spearman"), "len_Term" = length(childrenThr)))
+    dfM <- cbind(dfM, data.frame("Term_Group"=comp_mard(yTermThr[childrenThr],yTrue[childrenThr])))
+    
+    yTermNThr <- computeAggNodesU(tree=trNThrList[[i]], nodeID=c(1:length(txps),length(txps)+1:trNThrList[[i]]$Nnode), se_counts=assays(yNS)[["counts"]][txps,])[,i]
+    yTrue <-  computeAggNodesU(tree=trNThrList[[i]], nodeID=c(1:length(txps),length(txps)+1:trNThrList[[i]]$Nnode), se_counts=cbind(tCounts[txps,], tCounts[txps,]))[,1]
+    childrenNThr <- Descendants(trNThrList[[i]], length(txps)+1, "children")
+    df <- data.frame(df, cbind("treeTerm_Group" = cor(yTermNThr[childrenNThr], yTrue[childrenNThr],method="spearman"), "len_treeTerm_Group" = length(childrenNThr), "treeTerm_Opt" = cor(yTermNThr[treeNoThrCuts[[i]]], yTrue[treeNoThrCuts[[i]]], method="spearman"), "len_treeTerm_Opt" = length(treeNoThrCuts[[i]])))
+    dfM <- cbind(dfM, data.frame("treeTerm_Group"=comp_mard(yTermNThr[childrenNThr],yTrue[childrenNThr]), "treeTerm_Opt"=comp_mard(yTermNThr[treeNoThrCuts[[i]]],yTrue[treeNoThrCuts[[i]]])))
+    dfCor <- rbind(dfCor, df)
+    dfMard <- rbind(dfMard, dfM)
+}
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/dfSPLComp_mv.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/dInd_mv.RData")
+dfS <- reshape2::melt(dfSPLComp)
+ggplot(dfS, aes(x=variable, log2(value))) + geom_violin()
+ggplot(dInd, aes(x=factor(Type), y=log2(SPL))) + geom_violin()
+```
+
+```{r}
+dfCorMean <- colMeans(dfCor[,2:ncol(dfCor)])
+print(dfCorMean)
+plot(dfCorMean[seq(2,8,2)], dfCorMean[seq(1,8,2)])
+dfMardMean <- colMeans(dfMard[,2:ncol(dfMard)])
+print(dfMardMean)
+plot(dfCorMean[seq(2,8,2)], dfMardMean)
+```

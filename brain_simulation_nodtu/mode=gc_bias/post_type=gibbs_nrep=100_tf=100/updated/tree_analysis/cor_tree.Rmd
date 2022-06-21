@@ -1,0 +1,188 @@
+---
+title: "Correlation Trees"
+author: "Noor Pratap Singh"
+date: "4/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(ape))
+suppressPackageStartupMessages(library(phangorn))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(cluster))
+suppressPackageStartupMessages(library(fastcluster))
+suppressPackageStartupMessages(library(HDF5Array))
+suppressPackageStartupMessages(library(BiocParallel))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yNS.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+
+tempdir <- "/fs/cbcb-lab/rob/students/noor/RTemp"
+setAutoBlockSize(1e9)
+setHDF5DumpDir(tempdir)
+```
+
+```{r}
+UPGMA <- function (D, method = "average", ...) 
+{
+    DD <- as.dist(D)
+    hc <- fastcluster::hclust(DD, method = method, ...)
+    result <- as.phylo(hc)
+    result <- reorder(result, "postorder")
+    result
+}
+
+computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F) 
+{
+    infReps <- assays(y)[grep("infRep", assayNames(y))]
+    infReps <- abind::abind(as.list(infReps), along = 3)
+    infMean <- apply(infReps, 1:2, mean)
+    infVar <- apply(infReps, 1:2, var)
+    assays(y)[["mean"]] <- infMean
+    assays(y)[["variance"]] <- infVar
+    
+    InfRV <- pmax(infVar - infMean, 0)/(infMean + pc) + shift
+    if(rMean)
+        return(rowMeans(InfRV))
+    return(InfRV)
+}
+
+colMin <- function(M, arr) {
+    ntxps <- nrow(M[[1]])
+    D <- matrix(0, ncol = ntxps, nrow = length(M))
+    for(j in seq(ntxps)){
+        for(i in seq(M)) {
+            D[i,] <- M[[i]][j,]
+        }
+        arr[j,] <<- colMins(D)
+    }
+}
+
+colMin2 <- function(M, arr, nchunks=10) {
+    ###https://stackoverflow.com/questions/2434833/how-can-i-partition-a-vector
+    slice<-function(x,n) {
+        N<-length(x);
+        lapply(seq(1,N,n),function(i) x[i:min(i+n-1,N)])
+    }
+    ntxps <- nrow(M[[1]])
+    sl <- slice(1:ntxps, nchunks)
+    D <- matrix(0, ncol = ntxps, nrow = length(M))
+
+    for(k in seq_along(sl)){
+        mats <- lapply(seq_along(M), function(i) realize(M[[i]][sl[[k]],]))
+        for(j in seq_along(sl[[k]])){
+            for(i in seq(M)) {
+                D[i,] <- mats[[i]][j,]
+            }
+            arr[sl[[k]][j],] <<- (1+colMins(D))/2
+        }
+        
+    }
+}
+
+cMean <- function(M, arr, nchunks=10) {
+    ###https://stackoverflow.com/questions/2434833/how-can-i-partition-a-vector
+    slice<-function(x,n) {
+        N<-length(x);
+        lapply(seq(1,N,n),function(i) x[i:min(i+n-1,N)])
+    }
+    ntxps <- nrow(M[[1]])
+    sl <- slice(1:ntxps, nchunks)
+    D <- matrix(0, ncol = ntxps, nrow = length(M))
+
+    for(k in seq_along(sl)){
+        mats <- lapply(seq_along(M), function(i) realize(M[[i]][sl[[k]],]))
+        for(j in seq_along(sl[[k]])){
+            for(i in seq(M)) {
+                D[i,] <- mats[[i]][j,]
+            }
+            arr[sl[[k]][j],] <<- (1+colMeans(D))/2
+        }
+    }
+}
+```
+
+#### Creating anti-correlation trees
+```{r}
+# infReps <- assays(yNS)[grep("infRep", assayNames(yNS))]
+# infReps <- abind::abind(as.list(infReps), along = 3)
+# tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+# rInds <- which(rowSums(assays(yNS)[["counts"]]) == 0)
+# tInds <- Reduce(union,tInds)
+# tInds <- union(rInds, tInds)
+# infReps <- infReps[-tInds,,]
+# trCorUPGMA <- list()
+# 
+# corMats <- list()
+# for(i in seq(12)) {
+#     corTxps <- cor(t(infReps[,i,]))
+# 
+#     ###Building on anticorrelation
+#     #corTxps <- (1-corTxps)/2
+#     setHDF5DumpFile(paste(tempdir, paste("updated",paste(paste("cor",i,sep="_"),"hd5",sep="."), sep="/"), sep="/"))
+#     setHDF5DumpName(paste("cor",i,sep="_"))
+#     setHDF5DumpChunkShape("last-dim-grows-first")
+#     setHDF5DumpChunkLength(nrow(corTxps))
+#     corMats[[i]] <- as(corTxps, "HDF5Array")
+#     rm(corTxps)
+#     gc()
+#     # dd <- 1-dd
+#     # trCorUPGMA[[i]] <- UPGMA(dd)
+# }
+# 
+# arr <- matrix(0, dim(corMats[[1]])[1], dim(corMats[[1]])[1])
+# cMean(corMats, arr, 5000)
+# writeHDF5Array(arr, filepath="../../RTemp/updated/mean_cor_dist.hd5", name="mean_cor_dist")
+# trMeanCorUPGMA <- UPGMA(arr)
+# trMeanCorUPGMA$tip.label <- rownames(infReps)
+# save(trMeanCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trMeanCorUPGMA.RData")
+# 
+# mB <- mergeLeaves(trMeanCorUPGMA, yNS)
+# yR <- mB[["ySwish"]]
+# trMeanCorUPGMA <- mB[["tree"]]
+# yCorMeanAggNS <- prepSwish(trMeanCorUPGMA, yR)
+# yCorMeanAggS <- prepSwish(trMeanCorUPGMA, yS[rownames(yR),])
+# yCorMeanAggNS <- fishpond::computeInfRV(yCorMeanAggNS, meanVariance=F)
+# mcols(yCorMeanAggS)[["meanInfRV"]] <- mcols(yCorMeanAggNS)[["meanInfRV"]]
+# save(yCorMeanAggS, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/yCorMeanAggS.RData")
+# save(trMeanCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trMCorUPGMA.RData")
+```
+
+#### NGenes
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/trMCorUPGMA.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/yCorMeanAggS.RData")
+nNodes <- length(trMeanCorUPGMA$tip)+trMeanCorUPGMA$Nnode
+desc <- Descendants(trMeanCorUPGMA, seq(nNodes))
+genesCor <- mclapply(desc[length(trMeanCorUPGMA$tip)+1:trMeanCorUPGMA$Nnode], function(txps) unique(mapDf[rownames(yCorMeanAggS)[txps],1]), mc.cores=4)
+save(genesCor, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/comp_trees/genesCor.RData")
+
+nGenes <- rep(0, nNodes)
+nGenes[1:length(trMeanCorUPGMA$tip)] <- 1
+nGenes[length(trMeanCorUPGMA$tip)+1:trMeanCorUPGMA$Nnode] <- sapply(genesCor, length)
+
+depth <- node.depth(trMeanCorUPGMA,2)
+modDep <- depth
+modDep[depth >=7] = 7
+
+df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
+pL <- list()
+for(i in c(2:7)) {
+    dfR <- df[df[["modDep"]] == i, ]
+    if(i==7) {
+        print(sum(dfR[["nGenes"]] > 100))
+        dfR <- dfR[dfR[["nGenes"]] <= 100,]
+    }
+
+    pL[[i-1]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep))
+}
+ggarrange(plotlist=pL)
+```
