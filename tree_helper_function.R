@@ -71,7 +71,7 @@ mergeTree <- function(trees, updateInd = T, rowInd = T, tnames = NULL, se = NULL
 
 ## Given a tree run swish only on the filtered txps along with the group txps obtained by terminus
 ## type in c("union", "tree")
-runSwishtree <- function(tree, ySwish, type) {
+runSwishTree <- function(tree, ySwish, type) {
     if(!type %in% c("union", "tree"))
         stop(paste("invalid type", type))
     if(type == "union")
@@ -80,9 +80,7 @@ runSwishtree <- function(tree, ySwish, type) {
         tnames <- tree$tip.label
     ySwish <- ySwish[tnames,]
     #mcols(ySwish)[,'keep'] <- TRUE
-    set.seed(1)
     ySwish <- swish(ySwish, x="condition")
-    ySwish <- computeInfRV(ySwish)
     return(ySwish)
 }
 
@@ -795,11 +793,22 @@ compTPM <- function(counts, effLen) {
     return(tpms)
 }
 
-compSPL <- function(y, i, pc = 5) {
-  nodes <- seq(nrow(y))
-  infReps <- assays(y)[grep("infRep", assayNames(y))]
-  infReps <- abind::abind(as.list(infReps), along = 3)
-  infMean <- apply(infReps, 1:2, mean)
-  infVar <- apply(infReps, 1:2, var)
-  return(abs(infVar[,i]-infMean[,i])/(infMean[,i]+pc))
+##meanV is for adding variance+mean in denominator
+compSPL <- function(y, i, pc = 5, mv=T, meanV=F) {
+  if(!mv) {
+    infReps <- assays(y)[grep("infRep", assayNames(y))]
+    infReps <- abind::abind(as.list(infReps), along = 3)
+    infMean <- apply(infReps, 1:2, mean)
+    infVar <- apply(infReps, 1:2, var)
+  }
+  else {
+    infMean <- assays(y)[["mean"]]
+    infVar <- assays(y)[["variance"]]
+  }
+  spl <- abs(infVar[,i]-infMean[,i])/(infMean[,i]+pc)
+  if(meanV)
+    spl <- abs(infVar[,i]-infMean[,i])/(infVar[,i] + infMean[,i]+pc)
+  # if(log)
+  #   spl <- abs(log2(spl))
+  return(spl)
 }
