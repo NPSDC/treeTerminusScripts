@@ -167,17 +167,60 @@ cMean <- function(M, arr, nchunks=10) {
 
 ### Loading correlation matrix
 ```{r}
-corMats <- list()
-for(i in seq(12)) {
-    file <- paste(tempdir, paste(paste("cor",i,sep="_"),"hd5",sep="."), sep="/")
-    name <- paste("cor",i,sep="_")
-    corMats[[i]] <- HDF5Array(filepath=file, name=name)
+# corMats <- list()
+# for(i in seq(12)) {
+#     file <- paste(tempdir, paste(paste("cor",i,sep="_"),"hd5",sep="."), sep="/")
+#     name <- paste("cor",i,sep="_")
+#     corMats[[i]] <- HDF5Array(filepath=file, name=name)
+# }
+# arr <- matrix(0, dim(corMats[[1]])[1], dim(corMats[[1]])[1])
+# cMean(corMats, arr, 5000)
+# writeHDF5Array(arr, filepath="../../RTemp/mean_cor_dist.hd5", name="mean_cor_dist")
+# trMeanCorUPGMA <- UPGMA(arr)
+# save(trMeanCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCorUPGMA.RData")
+```
+
+#### Computing assays for correlation
+```{r}
+# trMeanCorUPGMA$tip.label <- rownames(infReps)
+# 
+# mB <- mergeLeaves(trMeanCorUPGMA, y)
+# yR <- mB[["ySwish"]]
+# trMeanCorUPGMA <- mB[["tree"]]
+# yCorMeanAgg <- prepSwish(trMeanCorUPGMA, yR)
+# yCorMeanAgg <- computeInfRV(yCorMeanAgg, meanVariance=F)
+# trMeanCor <- trMeanCorUPGMA
+# save(trMeanCor, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCor.RData")
+# save(yCorMeanAgg, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yCorMeanAgg.RData")
+```
+
+#### NGenes
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCor.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yCorMeanAgg.RData")
+nNodes <- length(trMeanCor$tip)+trMeanCor$Nnode
+desc <- Descendants(trMeanCor, seq(nNodes))
+genesL <- mclapply(desc[length(trMeanCor$tip)+1:trMeanCor$Nnode], function(txps) unique(mapDf[rownames(yCorMeanAgg)[txps],1]), mc.cores=4)
+nGenes <- rep(0, nNodes)
+nGenes[1:length(trMeanCor$tip)] <- 1
+nGenes[length(trMeanCor$tip)+1:trMeanCor$Nnode] <- sapply(genesL, length)
+
+depth <- node.depth(trMeanCor,2)
+modDep <- depth
+modDep[depth >=7] = 7
+
+df <- data.frame(nGenes = nGenes, modDep = modDep, depth=depth)
+pL <- list()
+for(i in seq(7)) {
+    dfR <- df[df[["modDep"]] == i, ]
+    if(i==7) {
+        print(sum(dfR[["nGenes"]] > 100))
+        dfR <- dfR[dfR[["nGenes"]] <= 100,]
+    }
+        
+    pL[[i]] <- ggplot(dfR, aes(x=nGenes)) +  geom_histogram()     #+facet_wrap(vars(modDep)) 
 }
-arr <- matrix(0, dim(corMats[[1]])[1], dim(corMats[[1]])[1])
-cMean(corMats, arr, 5000)
-writeHDF5Array(arr, filepath="../../RTemp/mean_cor_dist.hd5", name="mean_cor_dist")
-trMeanCorUPGMA <- UPGMA(arr)
-save(trMeanCorUPGMA, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCorUPGMA.RData")
+ggarrange(plotlist=pL)
 ```
 
 ### Correlation tree based on count

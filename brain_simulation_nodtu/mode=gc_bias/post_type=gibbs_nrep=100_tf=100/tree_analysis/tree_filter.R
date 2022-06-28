@@ -1,13 +1,15 @@
 library(phangorn)
 library(SummarizedExperiment)
 library(fishpond)
-computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F, addOne = F) 
+computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F, addOne = F, subOne = F) 
 {
     infReps <- assays(y)[grep("infRep", assayNames(y))]
     infReps <- abind::abind(as.list(infReps), along = 3)
     if(addOne)
         infReps <- infReps + 1
     infMean <- apply(infReps, 1:2, mean)
+    if(subOne)
+        infMean <- infMean - 1
     infVar <- apply(infReps, 1:2, var)
     
     assays(y)[["mean"]] <- infMean
@@ -21,7 +23,7 @@ computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F, addOne = F)
 
 findOptSum <- function(tree, spl, node, lengths = NULL) {
     if(globArr[node]!=-100)
-        return(globArr)
+        return(globArr[node])
     if(node <= length(tree$tip)) {
         globArr[node] <<- spl[node]
         return(spl[node])
@@ -35,8 +37,8 @@ findOptSum <- function(tree, spl, node, lengths = NULL) {
     return(v)
 }
 
-optMeans <- rep(-100,nrow(yAll))
-counts <- rep(-100,nrow(yAll))
+# optMeans <- rep(-100,nrow(yAll))
+# counts <- rep(-100,nrow(yAll))
 findOptMean <- function(tree, spl, node) {
     if(optMeans[node] != -100)
         return(c(optMeans[node]*counts[node], counts[node]))
@@ -82,7 +84,7 @@ findCuts <- function(tree, vals, spl, node, length = NULL) {
 
 findMaxSum <- function(tree, mv, node) {
     if(globArr[node] != -100)
-        return(mean2var[node])
+        return(globArr[node])
     if(node <= length(tree$tip)) {
         globArr[node] <<- mv[node]
         return(mv[node])

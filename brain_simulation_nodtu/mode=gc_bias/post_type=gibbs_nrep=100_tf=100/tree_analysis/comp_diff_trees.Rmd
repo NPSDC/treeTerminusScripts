@@ -17,71 +17,62 @@ suppressPackageStartupMessages(library(ape))
 suppressPackageStartupMessages(library(phangorn))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
 
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
-load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")2
-load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/updated/yAgg.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
-# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trUpgma.RData")
-# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yM.RData")
-# load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yA.RData")
-
-suppressPackageStartupMessages(source("tree_helper_function.R"))
-
-computeInfRV <- function (y, pc = 5, shift = 0.01, rMean=F) 
-{
-    infReps <- assays(y)[grep("infRep", assayNames(y))]
-    infReps <- abind::abind(as.list(infReps), along = 3)
-    infMean <- apply(infReps, 1:2, mean)
-    infVar <- apply(infReps, 1:2, var)
-    assays(y)[["mean"]] <- infMean
-    assays(y)[["variance"]] <- infVar
-    
-    InfRV <- pmax(infVar - infMean, 0)/(infMean + pc) + shift
-    if(rMean)
-        return(rowMeans(InfRV))
-    return(InfRV)
-}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCor.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/yCorMeanAgg.RData")
 ```
 
 #### Building infRV data frame
 ```{r}
-infRVSamp <- computeInfRV(yAll)
-# infRVSampMean <- rowMeans(infRVSamp)
 # depth <- node.depth(tree,2)
 # modDep <- depth
 # modDep[depth >=7] = 7
 # 
-# dfInfRV <- data.frame(infRV = infRVSampMean, depth = depth, modDep = modDep, type = "Consensus")
+# dfInfRV <- data.frame(infRV = mcols(yAll)[["meanInfRV"]], depth = depth, modDep = modDep, type = "Consensus")
 # 
 # ### Correlation trees
-# infRVCorr <- computeInfRV(yA)
-# depth <- node.depth(trUPGMA,2)
+# depth <- node.depth(trMeanCor,2)
 # modDep <- depth
 # modDep[depth >=7] = 7
-# dfInfRV <- rbind(dfInfRV, data.frame(infRV = rowMeans(infRVCorr), depth = depth, modDep = modDep, type = "Correlation"))
-# 
+# dfInfRV <- rbind(dfInfRV, data.frame(infRV = mcols(yCorMeanAgg)[["meanInfRV"]], depth = depth, modDep = modDep, type = "Correlation"))
+# # 
 # ### Random tree
-# tr <- tree
-# depth <- node.depth(tr,2)
-# yR <- y
-# modDep <- depth
-# modDep[depth >=7] = 7
-# tr$tip <- sample(tree$tip)
-# yR <- yR[tr$tip,]
-# yAgg <- prepSwish(tr, yR)
-# 
-# infRVMean <- computeInfRV(yAgg, rMean=T)
-# dfInfRV <- rbind(dfInfRV, data.frame(infRV = infRVMean, depth = depth, modDep = modDep, type = "Random"))
+# for(i in seq(20)) {
+#     tr <- tree
+#     depth <- node.depth(tr,2)
+#     yR <- y
+#     modDep <- depth
+#     modDep[depth >=7] = 7
+#     tr$tip.label <- sample(tree$tip.label)
+#     yR <- yR[tr$tip,]
+#     yAgg <- prepSwish(tr, yR)
+#     
+#     yAgg <- fishpond::computeInfRV(yAgg, meanVariance=F)
+#     dfInfRV <- rbind(dfInfRV, data.frame(infRV = mcols(yAgg)[["meanInfRV"]], depth = depth, modDep = modDep, type = "Random"))
+# }
+# save(dfInfRV, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfInfRV.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfInfRV.RData")
 
 ### Level Wise comparison
-# ggplot(dfInfRV, aes(x=factor(type), y=log10(infRV))) + geom_violin() + facet_wrap(vars(modDep))
+ggplot(dfInfRV, aes(x=factor(type), y=log10(infRV))) + geom_violin() + facet_wrap(vars(modDep))
+
+for(i in seq_along(7)) {
+    dfR <- dfInfRV[dfInfRV$modDep==i,]
+    ggplot(dfR, aes(x=log10(infRV))) + geom_histogram() + facet_wrap(vars(type))
+}
 ```
 
 
 ```{r}
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/infRVTree.RData")
 load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMS.RData")
+infRVSamp <- computeInfRV(yAll)[["InfRV"]]
 dfInfCons <- data.frame(matrix(ncol=4, nrow=0))
 colnames(dfInfCons) <- c("infRV", "sample", "depth", "type")
 depth <- node.depth(tree, 2)

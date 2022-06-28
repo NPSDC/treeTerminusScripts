@@ -38,61 +38,117 @@ dfSPLComp <- data.frame(matrix(nrow=0, ncol=4)) ### tree_term_nothr, tree_term_n
 colnames(dfSPLComp) <- c( "Sample", "TreeTerm_opt", "TreeTerm_groups", "Transcripts")
 bCuts <- list()
 
-for(i in seq_along(treeListNoThr)) {
-    print(i)
-    tr <- mergeTree(treeListNoThr[[i]], se = mapDf)
-    trThr <- mergeTree(treeListThr[[i]], se = mapDf)
-    txps <- union(tr$tip, trThr$tip)
-    yR <- y[txps,]
-    mB <- mergeLeaves(tr, yR)
-    yR <- mB[["ySwish"]]
-    tr <- mB[["tree"]]
-    yAgg <- prepSwish(tr, yR)
-    children <- Descendants(tr, nrow(yR)+1, "children")
-    print("Agg completed")
-    spl <- compSPL(yAgg, i=i, mv=F)
-    print("spl completed")
-    globArr <- rep(-100, nrow(yAgg))
-    lengths <- sapply(Descendants(tr, seq(nrow(yAgg))), length)
-    
-    optSPL <- findOptSum(tr, spl, nrow(yR)+1, lengths)
-    print("opt SPL completed")
-    bCuts[[i]] <- findCuts(tr, globArr, spl, nrow(yR)+1,lengths)
-    print("opt cuts found")
-    dfSPL <- rbind(dfSPL, data.frame(spl = spl, optSPL = globArr, sample = samples[i]))
-    dComp <- data.frame("Sample"=samples[i],"TreeTerm_opt"=sum(globArr[bCuts[[i]]]),
-                "TreeTerm_groups" = sum(spl[children]*lengths[children]),
-                "Transcripts" = sum(spl[1:nrow(yR)]))
-    
-    ### Hirak terminus
-    mB <- mergeLeaves(trThr, yR)
-    yR <- mB[["ySwish"]]
-    trThr <- mB[["tree"]]
-    
-    yAgg <- prepSwish(trThr, yR)
-    childrenThr <- Descendants(trThr, nrow(yR)+1, "children")
-    
-    spl <- compSPL(yAgg, i=i, mv=F)
-    print("spl completed")
-    globArr <- rep(-100, nrow(yAgg))
-    lengths <- sapply(Descendants(trThr, seq(nrow(yAgg))), length)
-    
-    optSPL <- findOptSum(trThr, spl, nrow(yR)+1, lengths)
-    print("opt SPL completed")
-    cs <- findCuts(trThr, globArr, spl, nrow(yR)+1,lengths)
-    print("opt cuts found")
-    
-    dComp <- cbind(dComp, data.frame("Term_opt"=sum(globArr[cs]),
-                "Term_groups" = sum(spl[childrenThr]*lengths[childrenThr])))
-    dfSPLComp <- rbind(dfSPLComp, dComp)
-}
-
-dfS <- reshape2::melt(dfSPLComp)
+trNThrList <- list()
+trThrList <- list()
+dInd <- data.frame(matrix(ncol=3, nrow=0))
+names(dInd) <- c("SPL", "Sample", "Type")
+# for(i in seq_along(treeListNoThr)){
+# 
+#     print(i)
+#     tr <- mergeTree(treeListNoThr[[i]], se = mapDf)
+#     trThr <- mergeTree(treeListThr[[i]], se = mapDf)
+#     txps <- union(tr$tip, trThr$tip)
+#     yR <- y[txps,]
+#     mB <- mergeLeaves(tr, yR)
+#     yR <- mB[["ySwish"]]
+#     tr <- mB[["tree"]]
+#     trThrList[[i]] <- trThr
+#     trNThrList[[i]] <- tr
+#     yAgg <- prepSwish(tr, yR)
+#     children <- Descendants(tr, nrow(yR)+1, "children")
+#     print("Agg completed")
+#     spl <- compSPL(yAgg, i=i, mv=F)
+#     print("spl completed")
+#     globArr <- rep(-100, nrow(yAgg))
+#     lengths <- sapply(Descendants(tr, seq(nrow(yAgg))), length)
+# 
+#     optSPL <- findOptSum(tr, spl, nrow(yR)+1, lengths)
+#     print("opt SPL completed")
+#     bCuts[[i]] <- findCuts(tr, globArr, spl, nrow(yR)+1,lengths)
+#     print("opt cuts found")
+#     dfSPL <- rbind(dfSPL, data.frame(spl = spl, optSPL = globArr, sample = samples[i]))
+#     dComp <- data.frame("Sample"=samples[i],"TreeTerm_opt"=sum(globArr[bCuts[[i]]]),
+#                 "TreeTerm_groups" = sum(spl[children]*lengths[children]),
+#                 "Transcripts" = sum(spl[1:nrow(yR)]))
+#     dInd <- rbind(dInd, data.frame(SPL=globArr[bCuts[[i]]], Sample=samples[i], Type="TreeTerm_opt"), data.frame(SPL=spl[children]*lengths[children], Sample=samples[i], Type="TreeTerm_groups"), data.frame(SPL=sum(spl[1:nrow(yR)]), Sample=samples[i], Type="Transcripts"))
+#     ### Hirak terminus
+#     mB <- mergeLeaves(trThr, yR)
+#     yR <- mB[["ySwish"]]
+#     trThr <- mB[["tree"]]
+#     trThrList[[i]] <- trThr
+# 
+#     yAgg <- prepSwish(trThr, yR)
+#     childrenThr <- Descendants(trThr, nrow(yR)+1, "children")
+# 
+#     spl <- compSPL(yAgg, i=i, mv=F)
+#     print("spl completed")
+#     globArr <- rep(-100, nrow(yAgg))
+#     lengths <- sapply(Descendants(trThr, seq(nrow(yAgg))), length)
+# 
+#     optSPL <- findOptSum(trThr, spl, nrow(yR)+1, lengths)
+#     print("opt SPL completed")
+#     cs <- findCuts(trThr, globArr, spl, nrow(yR)+1,lengths)
+#     print("opt cuts found")
+# 
+#     dComp <- cbind(dComp, data.frame("Term_opt"=sum(globArr[cs]),
+#                 "Term_groups" = sum(spl[childrenThr]*lengths[childrenThr])))
+#     dfSPLComp <- rbind(dfSPLComp, dComp)
+#     dInd <- rbind(dInd, data.frame(SPL=globArr[cs], Sample=samples[i], Type="Term_opt"),
+#                   data.frame(SPL=spl[childrenThr]*lengths[childrenThr], Sample=samples[i], Type="Term_groups"))
+# }
+# save(dInd, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dInd.RData")
 ```
 
 ```{r}
+# save(dfSPLComp, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPLComp.RData")
+# save(dfSPL, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPL.RData")
+# save(bCuts, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/bCuts.RData")
+# save(trNThrList, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trNThrList.RData")
+# save(trThrList, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trThrList.RData")
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPLComp.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPL.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/bCuts.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trNThrList.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trThrList.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dInd.RData")
+
+dfS <- reshape2::melt(dfSPLComp)
 ggplot(dfS, aes(x=variable, log10(value))) + geom_violin()
-save(dfSPLComp, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPLComp.RData")
-save(dfSPL, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/dfSPL.RData")
-save(bCuts, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/bCuts.RData")
+
+### Optimal Cuts lengths
+optCutLength <- lapply(seq_along(trNThrList), function(i) { 
+  tr <- trNThrList[[i]]
+  sapply(Descendants(tr, bCuts[[i]]), length)
+})
+
+### Terminus groups length
+termCutLength <- lapply(seq_along(trThrList), function(i) { 
+  tr <- trThrList[[i]]
+  children <- Descendants(tr, length(tr$tip)+1, "child")
+  sapply(Descendants(tr, children), length)
+})
+
+dfOptL <- data.frame(matrix(nrow=0, ncol = 3))
+colnames(dfOptL) <- c("Length", "Sample", "Type")
+for(i in seq_along(optCutLength))
+    dfOptL <- rbind(dfOptL, data.frame(Length=optCutLength[[i]], Sample=i, Type="OptCut"))
+
+dfTermL <- data.frame(matrix(nrow=0, ncol = 3))
+colnames(dfTermL) <- c("Length", "Sample", "Type")
+for(i in seq_along(termCutLength))
+    dfTermL <- rbind(dfTermL, data.frame(Length=termCutLength[[i]], Sample=i, Type="Terminus"))
+
+dfL <- rbind(dfOptL, dfTermL)
+#### Distribution of number of leaves at the collapsed nodes
+### What are the best plots
+### Finding examples where we undercollapse compared to overcollapse
+ggplot(dfL, aes(x=factor(Sample), y=log2(Length))) + geom_violin() + facet_wrap(vars(Type))
+```
+
+```{r}
+# dfS <- reshape2::melt(dfSPL)
+ggplot(dInd, aes(x=factor(Type), y=log10(SPL))) + geom_violin()
 ```

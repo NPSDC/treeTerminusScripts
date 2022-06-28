@@ -1,0 +1,41 @@
+---
+title: "DiffPvaluesMoreClimb"
+author: "Noor Pratap Singh"
+date: "5/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading Packages
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/yAll.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/y.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+```
+
+```{r}
+yInn <- swish(yAll[nrow(y)+1:tree$Nnode,], x="condition") ###Running swish on inner nodes
+mcols(yAll)[nrow(y)+1:tree$Nnode,"pvalue"] <- mcols(yInn)[,"pvalue"]
+```
+
+```{r}
+tDPvalMoreClimbMIRV <- list() ## These are with mIRV criteria on child only
+print(system.time(tDPvalMoreClimbMIRV[["mIRV=0"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0, alpha, cores=3), mc.cores=3)))
+save(tDPvalMoreClimbMIRV, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tDPvalMoreClimbMIRV.RData")
+print(system.time(tDPvalMoreClimbMIRV[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0.4, alpha, cores=3), mc.cores=3)))
+save(tDPvalMoreClimbMIRV, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tDPvalMoreClimbMIRV.RData")
+print(system.time(tDPvalMoreClimbMIRV[["mIRV=1"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 1, alpha, cores=3), mc.cores=3)))
+save(tDPvalMoreClimbMIRV, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tDPvalMoreClimbMIRV.RData")
+```
+
+```{r}
+tDPvalAfter <- runTreeTermAlphas(tree, yAll, "condition", 0.20, pCutOff = 0.05, pChild = 0.05, runType = c("a"), corr = c("qvalue"), alphas = c(0.01, 0.05, 0.10), cores = 3, compPThresh = T, temp=T)
+save(tDPvalAfter, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tDPvalAfter.RData")
+```
