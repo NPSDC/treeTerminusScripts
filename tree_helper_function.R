@@ -186,6 +186,7 @@ computeAggNodesU <- function(tree, nodeID, se_counts, group_inds = NULL) {
         }
           
         rownames(df) <- names(row_inds)
+        colnames(df) <- colnames(counts)
         return(df)
     }
     
@@ -215,7 +216,7 @@ computeAggNodesU <- function(tree, nodeID, se_counts, group_inds = NULL) {
       #print("ss")
     }
         
-    mat <- performRowAgg(mat, group_inds)       
+    mat <- performRowAgg(mat, group_inds)
   
     return(mat)
 }

@@ -82,7 +82,7 @@ findCuts <- function(tree, vals, spl, node, length = NULL) {
 }
 
 
-findMaxSum <- function(tree, mv, node) {
+findMaxSum <- function(tree, mv, node, lengths = NULL) {
     if(globArr[node] != -100)
         return(globArr[node])
     if(node <= length(tree$tip)) {
@@ -90,7 +90,10 @@ findMaxSum <- function(tree, mv, node) {
         return(mv[node])
     }
     children <- Descendants(tree, node, "child")
-    v <- max(mv[node], sum(sapply(children, function(child) findMaxSum(tree, mv, child))))
+    if(!is.null(lengths))
+        v <- max(mv[node]*lengths[node], sum(sapply(children, function(child) findMaxSum(tree, mv, child, lengths))))
+    else
+        v <- max(mv[node], sum(sapply(children, function(child) findMaxSum(tree, mv, child))))
     globArr[node] <<- v
     return(v)
 }
