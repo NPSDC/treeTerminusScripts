@@ -114,3 +114,7 @@ getLog2FC <- function(infRepsArray, condition, pc=5, array=FALSE) {
     rowMedians(diffs)
 }
 
+computeClusterPurity <- function(tree, mapDf, desc) {
+    genes <- mapDf[tree$tip[desc],1]
+    max(table(genes))/length(genes)
+}
