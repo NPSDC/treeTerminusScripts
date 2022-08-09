@@ -1,0 +1,118 @@
+---
+title: "Weighted LFC"
+author: "Noor Pratap Singh"
+date: "8/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/real_datasets/GSE100505/mapDf.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/treeCons.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/treeCons0.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/treeCor.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/treeMeanInf0.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/yAggCons.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/yAggCons0.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/yAggCor.RData")
+load("environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/yAggMeanInf0.RData")
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
+
+save_dir <- "environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees"
+
+wlfcDiff <- 0
+txpDiff <- NULL
+length(txpDiff)
+```
+
+#### Consensus Tree
+```{r}
+dfLFC <- data.frame(matrix(nrow=0, ncol=3))
+lfcCuts <- list()
+colnames(dfLFC) <- c("Type", "Value", "nCuts")
+l <- length(treeCons$tip)
+lengths <- sapply(Descendants(treeCons, seq(length(treeCons$tip)+treeCons$Nnode)), length)
+infReps <- assays(yAggCons)[grep("infRep", assayNames(yAggCons))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAggCons)[["condition"]])
+
+lfcMet <- abs(lfc/mcols(yAggCons)[["meanInfRV"]])
+globArr <- rep(-100, nrow(yAggCons))
+val <- findMaxSum(treeCons, lfcMet, l+1, lengths)
+gc()
+optLfcMet <- globArr
+cuts <- findCuts(treeCons, optLfcMet, lfcMet, l+1, lengths)
+gc()
+dfLFC <- rbind(dfLFC, data.frame(Type="Consensus", Value=val+wlfcDiff, nCuts = length(cuts)+length(txpDiff)))
+print(dfLFC)
+lfcCuts[["Consensus"]] <- cuts
+save(lfcCuts, file=file.path(save_dir, "cutsLFC.RData"))
+```
+
+### Mean Inf0
+```{r}
+l==length(treeMeanInf0$tip)
+infReps <- assays(yAggMeanInf0)[grep("infRep", assayNames(yAggMeanInf0))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAggMeanInf0)[["condition"]])
+
+lfcMet <- abs(lfc/mcols(yAggMeanInf0)[["meanInfRV"]])
+lengths <- sapply(Descendants(treeMeanInf0, seq(length(treeMeanInf0$tip)+treeMeanInf0$Nnode)), length)
+globArr <- rep(-100, nrow(yAggMeanInf0))
+val <- findMaxSum(treeMeanInf0, lfcMet, length(treeMeanInf0$tip)+1, lengths)
+gc()
+optLfcMet <- globArr
+print(val)
+cuts <- findCuts(treeMeanInf0, optLfcMet, lfcMet, length(treeMeanInf0$tip)+1, lengths)
+gc()
+dfLFC <- rbind(dfLFC, data.frame(Type="MeanInf0", Value=val, nCuts = length(cuts)))
+print(dfLFC)
+lfcCuts[["MeanInf0"]] <- cuts
+save(lfcCuts, file=file.path(save_dir, "cutsLFC.RData"))
+```
+
+#### Consensus0
+```{r}
+l==length(treeCons0$tip)
+infReps <- assays(yAggCons0)[grep("infRep", assayNames(yAggCons0))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAggCons0)[["condition"]])
+
+lfcMet <- abs(lfc/mcols(yAggCons0)[["meanInfRV"]])
+globArr <- rep(-100, nrow(yAggCons0))
+lengths <- sapply(Descendants(treeCons0, seq(length(treeCons0$tip)+treeCons0$Nnode)), length)
+val <- findMaxSum(treeCons0, lfcMet, l+1,lengths)
+gc()
+optLfcMet <- globArr
+cuts <- findCuts(treeCons0, optLfcMet, lfcMet, l+1, lengths)
+gc()
+dfLFC <- rbind(dfLFC, data.frame(Type="Cons0", Value=val+wlfcDiff, nCuts = length(cuts) + length(txpDiff)))
+print(dfLFC)
+lfcCuts[["Cons0"]] <- cuts
+save(lfcCuts, file=file.path(save_dir, "cutsLFC.RData"))
+```
+
+#### Correlation
+```{r}
+l==length(treeCor$tip)
+infReps <- assays(yAggCor)[grep("infRep", assayNames(yAggCor))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+lfc <- getLog2FC(infReps, colData(yAggCor)[["condition"]])
+lengths <- sapply(Descendants(treeCor, seq(length(treeCor$tip)+treeCor$Nnode)), length)
+lfcMet <- abs(lfc/mcols(yAggCor)[["meanInfRV"]])
+globArr <- rep(-100, nrow(yAggCor))
+val <- findMaxSum(treeCor, lfcMet, l+1, lengths)
+gc()
+optLfcMet <- globArr
+cuts <- findCuts(treeCor, optLfcMet, lfcMet, l+1, lengths)
+gc()
+dfLFC <- rbind(dfLFC, data.frame(Type="Anti-Correlation", Value=val + wlfcDiff, nCuts = length(cuts) + length(txpDiff)))
+lfcCuts[["Anti-Correlation"]] <- cuts
+save(lfcCuts, file=file.path(save_dir, "cutsLFC.RData"))
+print(sapply(lfcCuts,length))
+```
