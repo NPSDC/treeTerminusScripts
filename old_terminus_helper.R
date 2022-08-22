@@ -19,8 +19,8 @@ parseClustFile <- function(file, y)
     
 }
 
-computeAggNodesU <- function(groups, nodeID, se_counts, group_inds = NULL) {
-    performRowAgg <- function(counts, col_inds = NULL) {
+computeOAggNodesU <- function(groups, nodeID, se_counts, group_inds = NULL) {
+    performORowAgg <- function(counts, col_inds = NULL) {
         if(is.null(dim(counts)))
             stop("counts has to be matrix/dataframe")
         if(is.null(rownames(counts)))
@@ -38,7 +38,7 @@ computeAggNodesU <- function(groups, nodeID, se_counts, group_inds = NULL) {
             return(df)
         }
     }
-    performColAgg <- function(counts, row_inds = NULL)
+    performOColAgg <- function(counts, row_inds = NULL)
     {
         if(is.null(dim(counts)))
             stop("counts has to be matrix/dataframe")
@@ -61,31 +61,30 @@ computeAggNodesU <- function(groups, nodeID, se_counts, group_inds = NULL) {
     }
     
     mat <- matrix(0, nrow=0, ncol=ncol(se_counts))
-    
+
     leaves <- which(nodeID <= nrow(se_counts))
     innNodes <- which(nodeID > nrow(se_counts))
-    
     lInds <- groups
     names(lInds) <- as.character(nodeID[innNodes])
     ls <- sapply(lInds, length)
     if(length(leaves) > 0)
-        mat <- performColAgg(se_counts[nodeID[leaves],])
+        mat <- performOColAgg(se_counts[nodeID[leaves],])
     if(length(innNodes) > 0)
-        mat <- rbind(mat, performColAgg(se_counts, lInds))
+        mat <- rbind(mat, performOColAgg(se_counts, lInds))
     
-    mat <- performRowAgg(mat, group_inds)       
+    mat <- performORowAgg(mat, group_inds)       
     
     return(mat)
 }
 
-prepSwish <- function(y, inds, groups) 
+prepOSwish <- function(y, inds, groups) 
 {
     asList <- vector(mode = "list", length(assays(y)))
     #asList <- vector(mode = "list", 5)
     names(asList) <- assayNames(y)
     
     for(n in names(asList))
-        asList[[n]] <- computeAggNodesU(groups, inds, assays(y)[[n]], NULL)
+        asList[[n]] <- computeOAggNodesU(groups, inds, assays(y)[[n]], NULL)
     
     y <- SummarizedExperiment(assays = asList, colData = colData(y), metadata = metadata(y))
     metadata(y)$infRepsScaled=F
