@@ -1,0 +1,66 @@
+---
+title: "Correlation Trees"
+author: "Noor Pratap Singh"
+date: "4/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/seBrainSim.RData")
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+
+```
+
+```{r}
+UPGMA <- function (D, method = "average", ...) 
+{
+    DD <- as.dist(D)
+    hc <- fastcluster::hclust(DD, method = method, ...)
+    result <- as.phylo(hc)
+    result <- reorder(result, "postorder")
+    result
+}
+```
+
+```{r}
+seNorm <- scaleInfReps(seBrainSim)
+infReps <- assays(seBrainSim)[grep("infRep", assayNames(seBrainSim))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+rInds <- which(rowSums(assays(seBrainSim)[["counts"]]) == 0)
+tInds <- Reduce(union, tInds)
+rInds <- union(rInds, tInds)
+infReps <- assays(seNorm)[grep("infRep", assayNames(seNorm))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+tInds <- Reduce(union,tInds)
+rInds <- union(rInds, tInds)
+infReps <- infReps[-rInds,,]
+trCorUPGMA <- list()
+ 
+corMats <- list()
+corMean <- matrix(0, dim(infReps)[1], dim(infReps)[1])
+for(i in seq(12)) {
+     corTxps <- cor(t(infReps[,i,]))
+     ###Building on anticorrelation
+     corMean <- corMean + corTxps
+     rm(corTxps)
+     gc()
+}
+corMean <- corMean/12
+save(corMean, file = "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/cor_mean_norm.RData")
+```
+
+```{r}
+d <- (1+corMean)/2
+trMeanCorUPGMANorm <- UPGMA(d)
+trMeanCorUPGMANorm$tip.label <- rownames(infReps)
+save(trMeanCorUPGMANorm, file="environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees/trMeanCorUPGMANorm.RData")
+```
