@@ -9,6 +9,7 @@ def get_partition(rule_name):
     return partitions[rule_name] if rule_name in partitions else partitions['__default__']
 
 exp_dir=config['exp_directory'] ##directory of experiment - aka where all subfolder will reside
+# ann_dir=config['ann_path']
 post_type=config["posterior_type"] ##specific type of posterior sampling gibbs or bootstrap
 REPLICATES=config['replicates']
 exp_gc_mode = str(exp_dir)
@@ -21,7 +22,7 @@ else:
     exp_gc_mode = join(exp_dir, "mode=no_gc_bias")
 print(exp_gc_mode)
 
-txp_sim_fasta_path=join(exp_dir, config['txp_sim_fasta']) ##path of transcript fasta
+txp_sim_fasta_path=join(exp_gc_mode, config['txp_sim_fasta']) ##path of transcript fasta
 if config['txp_sim_fasta'].startswith('/'):
     txp_sim_fasta_path=config['txp_sim_fasta'] ##path of transcript fasta
 
@@ -29,6 +30,11 @@ read_path=join(exp_gc_mode, config['read_path']) ##path where fastq files are st
 read_fasta_file=join(read_path, "{rep}", "sample_0{cond}_{read}.fasta")
 read_fasta_file_rgen=join(read_path, "{{rep}}", "sample_0{cond}_{read}.fasta")
 read_fasta_file_sal=join(read_path, "{{rep}}", "sample_0{{cond}}_{read}.fasta")
+
+keep_dup=False
+if "keep_dup" in config.keys():
+    keep_dup=config["keep_dup"]
+
 
 nrep=config["nreplicates"] ##number of posterior samples
 tf=16
@@ -39,8 +45,9 @@ if(post_type=="gibbs"):
     post_dir=join(exp_gc_mode, "post_type={}_nrep={}_tf={}").format(post_type, nrep, tf) ##thinning factor additional for gibbs
 # #else:
 
-out_sal_dir=join(post_dir, config['out_sal_path'])
-out_sal_quant=join(out_sal_dir, "{rep}_{cond}", "quant.sf")
+sal_dir = join(post_dir, config['out_sal_path'])
+sal_quant_dir = join(sal_dir, "{rep}_{cond}")
+sal_quant_file = join(sal_quant_dir, "quant.sf")
 
 txp_ref = join(exp_dir, config["txp_fasta"])
 if config['txp_fasta'].startswith("/"):
@@ -52,62 +59,190 @@ if config['sal_ind_path'].startswith("/"):
 read_fasta_file_pe1 = read_fasta_file_sal.format(read=1)
 read_fasta_file_pe2 = read_fasta_file_sal.format(read=2)
 
-term_out_dir = join(post_dir, config['out_term_path'])
-term_group = join(term_out_dir, "{rep}_{cond}/groups.txt")
-clust_nwk = join(term_out_dir, 'cluster_nwk.txt')
-# rule all:
-#     #input:expand(config["read_path"] + "/{rep}/sample_0{cond}_{read}.fasta", rep=REPLICATES, cond=[1,2], read=[1,2])
-#     input:expand(out_sal_quant, rep=REPLICATES, cond=[1,2])
-#     params:
-#         partition = get_partition('all')
+term_dir = join(post_dir, "terminus")
+term_nothr_dir = join(term_dir, "no_threshold")
+term_nothr0_dir = join(term_dir, "no_threshold0")
+term_thr_dir = join(term_dir, "threshold")
+term_mean_inf0_dir = join(term_dir, "no_threshold_meaninf_0")
+term_old_dir = join(term_dir, "old") ###Hirak terminus
 
-rule run_terminus:
-    input:clust_nwk
-        #p1 = expand(config['out_term'] + "/{run}/groups.txt", run=up_runs),
-    params:
-        partition = get_partition('run_terminus')
+term_nothr_sample = join(term_nothr_dir, "{rep}_{cond}")
+term_nothr0_sample = join(term_nothr0_dir, "{rep}_{cond}")
+term_thr_sample = join(term_thr_dir, "{rep}_{cond}")
+term_old_sample = join(term_old_dir, "{rep}_{cond}")
 
-rule run_term_collapse:
+term_thr_group = join(term_thr_sample, "groups.txt")
+term_nothr_group = join(term_nothr_sample, "groups.txt")
+term_nothr0_group = join(term_nothr0_sample, "groups.txt")
+term_mean_inf0_group = join(term_mean_inf0_dir, "group_nwk.txt")
+term_old_group =  join(term_old_sample, "groups.txt")
+
+term_nothr0_clust = join(term_nothr0_dir, "cluster_nwk.txt")
+term_thr_clust = join(term_thr_dir, "cluster_nwk.txt")
+term_nothr_clust = join(term_nothr_dir, "cluster_nwk.txt")
+term_old_clust = join(term_old_sample, "clusters.txt")
+
+rule final_outputs:
     input:
-        expand(term_group, rep=REPLICATES, cond=[1,2])
+        term_thr_clust,
+        term_nothr_clust,
+        term_nothr0_clust,
+        term_mean_inf0_group,
+        expand(term_old_clust, rep = REPLICATES, cond = [1,2])
+
+rule run_term_collapse_hirak:
+    input:
+        inp_term = expand(term_old_group, rep = REPLICATES, cond = [1,2]),
+        inp_sal = expand(sal_quant_dir, rep = REPLICATES, cond = [1,2])
     output:
-        clust_nwk
+        expand(term_old_clust,  rep = REPLICATES, cond = [1,2])
     params:
-        term_path = config["term_path"],
-        input = out_sal_dir,
-        output = term_out_dir,
-        partition = get_partition('run_term_collapse')
+        term_path = config["term_hirak_path"],
+        output = term_old_dir,
+        partition = get_partition('run_term_collapse_hirak')
     shell:
         """
             cd {params.term_path}
-            target/release/terminus collapse -c 0 -d {params.input} -o {params.output} -m true --merge_type phylip
+            target/release/terminus collapse -c 0.5 -d {input.inp_sal} -o {params.output}
             cd -
         """
+rule run_term_group_hirak:
+    input:expand(term_old_group, rep = REPLICATES, cond = [1,2])
 
-rule run_term_group:
+rule _run_term_group_hirak:
+    input:sal_quant_dir
+    output:term_old_group
+    params:
+        term_path = config["term_hirak_path"] + "/target/release/terminus",
+        output = term_old_dir,
+        partition = get_partition('_run_term_group_hirak')
+    shell:
+        """
+          {params.term_path} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output}
+        """
+
+rule run_term_mean_inf0:
+    input:sal_dir
+    output:term_mean_inf0_group
+    params:
+        term_path = config["term_path"] + "/target/release/terminus",
+        partition = get_partition('run_term_mean_inf0'),
+        output = term_mean_inf0_dir,
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output} --thr false --mean_inf true --inf_perc 0"
+
+rule run_term_cons_nothr0:
     input:
-        out_sal_quant
+        group_files = expand(term_nothr0_group, rep = REPLICATES, cond = [1,2]),
+        quant_files = expand(sal_quant_dir, rep = REPLICATES, cond = [1,2])
+    output:term_nothr0_clust
+    params:
+        term_path = config["term_path"],
+        input = sal_dir,
+        output = term_nothr0_dir,
+        partition = get_partition('run_term_cons_nothr0')
+    shell:
+        """
+           cd {params.term_path}
+           target/release/terminus collapse -d {params.input} -o {params.output} --merge_type phylip
+           cd -
+        """        
+rule run_term_group_nothr0:
+    input:
+        expand(term_nothr0_group, rep = REPLICATES, cond = [1,2])
+rule _run_term_group_nothr0:
+    input:
+        sal_quant_dir
     output:
-        term_group
+        term_nothr0_group
     params:
         term_path=config["term_path"] + "/target/release/terminus",
-        partition = get_partition('run_term_group'),
-        output = term_out_dir,
-        input = join(out_sal_dir,  "{rep}_{cond}")
-    shell:
-        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {params.input} -o {params.output}  --thr false"
+        partition = get_partition('_run_term_group_nothr0'),
+        output = term_nothr0_dir,
 
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output} --mean_inf false --thr false --inf_perc 0"
+
+rule run_term_cons_nothr:
+    input:
+        group_files = expand(term_nothr_group, rep = REPLICATES, cond = [1,2]),
+        quant_files = expand(sal_quant_dir, rep = REPLICATES, cond = [1,2])
+    output:term_nothr_clust
+    params:
+        term_path = config["term_path"],
+        input = sal_dir,
+        output = term_nothr_dir,
+        partition = get_partition('run_term_cons_nothr')
+    shell:
+        """
+           cd {params.term_path}
+           target/release/terminus collapse -d {params.input} -o {params.output} --merge_type phylip
+           cd -
+        """
+
+rule run_term_group_nothr:
+    input:
+        expand(term_nothr_group, rep = REPLICATES, cond = [1,2])
+rule _run_term_group_nothr:
+    input:
+        sal_quant_dir
+    output:
+        term_nothr_group
+    params:
+        term_path=config["term_path"] + "/target/release/terminus",
+        partition = get_partition('_run_term_group_nothr'),
+        output = term_nothr_dir,
+
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output} --mean_inf false --thr false"
+
+rule run_term_cons_thr:
+    input:
+        group_files = expand(term_thr_group, rep = REPLICATES, cond = [1,2]),
+        quant_files = expand(sal_quant_dir, rep = REPLICATES, cond = [1,2])
+    output:term_thr_clust
+    params:
+        term_path = config["term_path"],
+        input = sal_dir,
+        output = term_thr_dir,
+        partition = get_partition('run_term_cons_thr')
+    shell:
+        """
+           cd {params.term_path}
+           target/release/terminus collapse -d {params.input} -o {params.output} --merge_type phylip
+           cd -
+        """
+
+rule run_term_group_thr:
+    input:
+        expand(term_thr_group, rep = REPLICATES, cond = [1,2])
+rule _run_term_group_thr:
+    input:
+        sal_quant_dir
+    output:
+        term_thr_group
+    params:
+        term_path=config["term_path"] + "/target/release/terminus",
+        partition = get_partition('_run_term_group_thr'),
+        output = term_thr_dir,
+
+    shell:
+        "{params.term_path} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output} --mean_inf false --thr true"
 
 rule run_salmon:
+    input:
+        expand(sal_quant_file, rep=REPLICATES, cond=[1,2])
+
+rule _run_salmon:
     input:
         inp_fastq1 = read_fasta_file_pe1,
         inp_fastq2 = read_fasta_file_pe2,
         index = join(sal_ind_path, "pos.bin")
     output:
-        out_sal_quant
+        sal_quant_file
     resources: cpus=10, mem=32000
     params:
-        out_dir = join(out_sal_dir, "{rep}_{cond}"),
+        out_dir = sal_quant_dir,
         partition = get_partition('run_salmon'),
         sal_path = config['sal_path'],
         sal_ind = sal_ind_path,
@@ -134,18 +269,19 @@ rule run_salmon:
                 --numBootstraps {params.nrep} -d \
                 -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
 
-# rule build_sal_ind:
-#     input:txp_ref
-#     output:join(sal_ind_path, "pos.bin")
-#     params:
-#         out_ind_path = sal_ind_path,
-#         partition = get_partition('build_sal_ind'),
-#         sal_path = config['sal_path']
-#     resources:cpus=10, mem=32000
-#     shell:
-#         """
-#            {params.sal_path} index --keepDuplicates -p {resources.cpus} -t {input} -i {params.out_ind_path}
-#         """
+rule build_sal_ind:
+    input:ancient(txp_ref)
+    output:join(sal_ind_path, "pos.bin")
+    params:
+        out_ind_path = sal_ind_path,
+        partition = get_partition('build_sal_ind'),
+        sal_path = config['sal_path']
+    resources:cpus=10, mem=32000
+    run:
+        if keep_dup:
+            shell("{params.sal_path} index --keepDuplicates -p {resources.cpus} -t {input} -i {params.out_ind_path}")
+        else:
+            shell("{params.sal_path} index -p {resources.cpus} -t {input} -i {params.out_ind_path}")
 
 rule all_reads:
     input:expand(read_fasta_file, rep=REPLICATES, cond=[1,2], read=[1,2])
@@ -175,7 +311,8 @@ rule sim_expression:
     params:
         partition = get_partition('sim_expression')
     output:
-        config["sim_rda"]
+        sim = config["sim_rda"],
+        txp_sim_fasta = txp_sim_fasta_path
     shell:
         """
             source ~/.bashrc
