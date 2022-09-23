@@ -1,0 +1,100 @@
+---
+title: "Correlation Trees"
+author: "Noor Pratap Singh"
+date: "4/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(HDF5Array))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(BiocParallel))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+load("environment/Chimp/se_chimp.RData")
+load("environment/Chimp/mode=gcbias/post_type=gibbs_nrep=100_tf=100/seChimpScaled.RData")
+```
+
+```{r}
+UPGMA <- function (D, method = "average", ...) 
+{
+    DD <- as.dist(D)
+    hc <- fastcluster::hclust(DD, method = method, ...)
+    result <- as.phylo(hc)
+    result <- reorder(result, "postorder")
+    result
+}
+
+```
+
+#### Creating anti-correlation trees
+```{r}
+# sampDorNucl <- data.frame(colData(seChimp)) %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% dplyr::select(names) %>% unlist
+# seChimp <- seChimp[,!(colnames(seChimp) %in% sampDorNucl)]
+# infReps <- assays(seChimp)[grep("infRep", assayNames(seChimp))]
+# infReps <- abind::abind(as.list(infReps), along = 3)
+# tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+# rInds <- which(rowSums(assays(seChimp)[["counts"]]) == 0)
+# tInds <- Reduce(union,tInds)
+# tInds <- union(rInds, tInds)
+# trCorUPGMA <- list()
+# rm(seChimp)
+# infReps <- assays(seChimpScaled)[grep("infRep", assayNames(seChimpScaled))]
+# infReps <- abind::abind(as.list(infReps), along = 3)
+# infReps <- infReps[-tInds,,]
+# 
+# corMean <- matrix(0, dim(infReps)[1], dim(infReps)[1])
+# for(i in seq(ncol(seChimpScaled))) {
+#      corTxps <- cor(t(infReps[,i,]))
+#      corMean <- corMean + corTxps
+#      ###Building on anticorrelation
+#      rm(corTxps)
+#      gc()
+# }
+# corMean <- corMean/ncol(seChimpScaled)
+# save(corMean, file = "environment/Chimp/mode=gcbias/post_type=gibbs_nrep=100_tf=100/tree_analysis/cor_tree.RData")
+```
+
+```{r}
+# d <- (1+corMean)/2
+# trMeanCorUPGMA <- UPGMA(d)
+# trMeanCorUPGMA$tip.label <- rownames(infReps)
+# save(trMeanCorUPGMA, file="environment/Chimp/mode=gcbias/post_type=gibbs_nrep=100_tf=100/tree_analysis/trMeanCorUPGMA.RData")
+```
+
+```{r}
+sampDorNucl <- data.frame(colData(seChimp)) %>% filter(tissue == "medial dorsal nucleus of thalamus") %>% dplyr::select(names) %>% unlist
+seChimp <- seChimp[,!(colnames(seChimp) %in% sampDorNucl)]
+infReps <- assays(seChimp)[grep("infRep", assayNames(seChimp))]
+infReps <- abind::abind(as.list(infReps), along = 3)
+tInds <- lapply(seq(12), function(i) which(rowSums(infReps[,i,]) == 0))
+rInds <- which(rowSums(assays(seChimp)[["counts"]]) == 0)
+tInds <- Reduce(union,tInds)
+rInds <- union(rInds, tInds)
+trCorUPGMA <- list()
+infReps <- infReps[-rInds,,]
+
+corMean <- matrix(0, dim(infReps)[1], dim(infReps)[1])
+for(i in seq(ncol(seChimp))) {
+     corTxps <- cor(t(infReps[,i,]))
+     corMean <- corMean + corTxps
+     ###Building on anticorrelation
+     rm(corTxps)
+     gc()
+}
+corMean <- corMean/ncol(seChimp)
+save(corMean, file = "environment/Chimp/mode=gcbias/post_type=gibbs_nrep=100_tf=100/tree_analysis/cor_mean_not_norm.RData")
+d <- (1+corMean)/2
+trMeanCorUPGMAnotNorm <- UPGMA(d)
+trMeanCorUPGMAnotNorm$tip.label <- rownames(infReps)
+save(trMeanCorUPGMAnotNorm, file="environment/Chimp/mode=gcbias/post_type=gibbs_nrep=100_tf=100/tree_analysis/trMeanCorUPGMAnotNorm.RData")
+```
