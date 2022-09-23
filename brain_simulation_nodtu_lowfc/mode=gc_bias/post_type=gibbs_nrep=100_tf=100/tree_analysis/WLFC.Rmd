@@ -1,0 +1,61 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
+dir <- "environment/brain_sim_nodtu_lowfc/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees"
+load(file.path(dir, "treeCons.RData"))
+load(file.path(dir, "treeCons0.RData"))
+load(file.path(dir, "treeCor.RData"))
+load(file.path(dir, "treeMeanInf0.RData"))
+load(file.path(dir, "treeThr.RData"))
+load(file.path(dir, "yAggConsNS.RData"))
+load(file.path(dir, "yAggConsNS0.RData"))
+load(file.path(dir, "yAggCorNS.RData"))
+load(file.path(dir, "yAggMeanInfNS0.RData"))
+load(file.path(dir, "yAggThrNS.RData"))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
+
+
+wlfcDiff <- 0
+txpDiff <- NULL
+length(txpDiff)
+```
+
+```{r}
+dfDepth <- data.frame(matrix(nrow=0, ncol=4))
+colnames(dfDepth) <- c("Type", "Value", "nCuts", "gamma")
+
+l <- length(treeCons$tip)
+trees <- list(treeCons, treeCons0, treeMeanInf0, treeCor, treeThr)
+names(trees) <- c("Consensus", "Consensus0", "MeanInf0", "Cor", "Thr")
+yAgg <- list(yAggConsNS, yAggConsNS0, yAggMeanInfNS0, yAggCorNS, yAggThrNS)
+names(yAgg) <- c("Consensus", "Consensus0", "MeanInf0", "Cor", "Thr")
+
+dCutsDLFC <- vector(mode = "list", length=length(yAgg))
+gammas <- c(0.1,0.5,1,5,10)
+names(dCutsDLFC) <- paste("gamma=", gammas, sep="")
+for(j in seq_along(dCutsDLFC)) {
+    gamma <- gammas[j]
+    dCutsDLFC[[j]] <- vector(mode="list", length(trees))
+    names(dCutsDLFC[[j]]) <- names(trees)
+    for(i in seq(trees)) {
+        globArr <- rep(-100, l+trees[[i]]$Nnode)
+        descL <- sapply(Descendants(trees[[i]], seq(l+trees[[i]]$Nnode)), length)
+        
+        obj <- abs(mcols(yAgg[[i]])[["LFC"]]/mcols(yAgg[[i]])[["meanInfRV"]]) - gamma*node.depth(trees[[i]],2)
+        val <- findMaxSum(trees[[i]], obj, l+1, descL)
+        gc()
+        dCutsDLFC[[j]][[i]] <- findCuts(trees[[i]], globArr, obj, l+1, descL)
+        gc()
+        dfDepth <- rbind(dfDepth, data.frame(Type = names(trees)[i], Value = val,
+               nCuts = length(dCutsDLFC[[j]][[i]]), gamma=gamma))
+    }
+}
+print(dfDepth)
+save(dfDepth, file=file.path(dir, "dfDepth.RData"))
+save(dCutsDLFC, file=file.path(dir, "dCutsDLFC.RData"))
+```

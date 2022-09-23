@@ -1,4 +1,5 @@
 environment
+**/checkpoint.ipynb
 *.PDF
 *.html
 *.log
@@ -7,3 +8,12 @@ environment
 *.out
 slurm*
 */snake*/.snake*
+*.sh
+*.snakemake
+*.gz
+*.DS*
+*.txt
+*.nwk
+*.conf
+*.Rhistory
+*.tsv
