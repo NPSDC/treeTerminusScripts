@@ -1,5 +1,6 @@
+**/.png
 environment
-**/checkpoint.ipynb
+*.ipynb_checkpoints/WLFC-checkpoint.ipynb
 *.PDF
 *.html
 *.log
