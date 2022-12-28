@@ -5,7 +5,7 @@ fastaPath <- args[2]
 outPath <- args[3]
 print(paste(i, fastaPath, outPath))
 library(polyester)
-load("../environment/brain_sim_nodtu/simulate.rda")
+load("../environment/brain_sim_nodtu/mode=gc_bias/simulate.rda")
 se <- simulate_experiment(fasta=fastaPath,
                           outdir=file.path(outPath,  i),
                           num_reps=c(1,1),

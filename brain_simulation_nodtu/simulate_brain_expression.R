@@ -8,7 +8,7 @@ quants$TPM <- quants$TPM * 1e6 / sum(quants$TPM)
 
 suppressPackageStartupMessages(library(GenomicFeatures))
 ann_dir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation"
-save_dir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/annotation"
+save_dir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_nodtu/mode=gc_bias/annotation/"
 gtf <- file.path(ann_dir, "gencode.v26.annotation.gtf.gz")
 txdb.filename <- file.path(ann_dir, "gencode.v26.annotation.sqlite")
 #gtf <- "gencode.v26.annotation.gtf.gz"
@@ -116,8 +116,8 @@ if (!onlyDTU) {
       iso.dte.only[this.txs][exprs.tx] <- TRUE
     }
     coinflip <- sample(c(FALSE,TRUE),1)
-    #fc <- runif(1,2,6)
-    fc <- runif(1,2,3)
+    fc <- runif(1,2,6)
+    
     if (coinflip) {
       tpms[this.txs,2][exprs.tx] <- fc * tpm.this.txs[exprs.tx]
     } else {
