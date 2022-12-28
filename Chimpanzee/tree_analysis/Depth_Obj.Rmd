@@ -21,280 +21,45 @@ suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_
 
 ```
 
-#### Gamma 0.1
 ```{r}
-gamma <- 0.1
-dfDepth <- data.frame(matrix(nrow=0, ncol=4))
-dCutsD <- list()
-dCutsD[["gamma=0.1"]] <- list()
-colnames(dfDepth) <- c("Type", "Value", "nCuts", "gamma")
-l <- length(treeCons0$tip)
+dfInf <- data.frame(matrix(nrow=0, ncol=4))
+colnames(dfInf) <- c("Type", "Value", "nCuts", "gamma")
 
-globArr <- rep(-100, l+treeCons0$Nnode)
-descL <- sapply(Descendants(treeCons0, seq(l+treeCons0$Nnode)), length)
-obj <- mcols(yAggConsNS0)[["meanInfRV"]] + gamma*node.depth(treeCons0,2)
-val <- findOptSum(treeCons0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.1"]][["Cons0"]] <- findCuts(treeCons0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=0.1"]][["Cons0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons0", Value = val,
-       nCuts = length(dCutsD[["gamma=0.1"]][["Cons0"]]), gamma=gamma))
+gammas <- c(0.05, 0.1,0.5,1,5,10)
+dCutsDInf <- vector(mode = "list", length=length(gammas))
+names(dCutsDInf) <- paste("gamma=", gammas, sep="")
 
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
+l <- length(treeCons$tip)
+types <- c("ConsFilt", "Cons", "Mean", "AC", "ConsFiltES")
+trees <- list(treeCons, treeCons0, treeMeanInf0, treeCor, treeThr)
+names(trees) <- types
+yAgg <- list(yAggConsNS, yAggConsNS0, yAggMeanInfNS0, yAggCorNS, yAggThrNS)
+names(yAgg) <- types
 
+for(j in seq_along(dCutsDInf)) {
+    gamma <- gammas[j]
+    dCutsDInf[[j]] <- vector(mode="list", length(trees)+1)
+    names(dCutsDInf[[j]]) <- c(names(trees),"Txps")
+    for(i in seq(trees)) {
+        globArr <- rep(-100, l+trees[[i]]$Nnode)
+        descL <- sapply(Descendants(trees[[i]], seq(l+trees[[i]]$Nnode)), length)
+        infReps <- assays(yAgg[[i]])[grep("infRep", assayNames(yAgg[[i]]))]
+        infReps <- abind::abind(as.list(infReps), along = 3)
+        obj <- mcols(yAgg[[i]])[["meanInfRV"]] + gamma*node.depth(trees[[i]],2)
+        val <- findOptSum(trees[[i]], obj, l+1, descL)
 
-globArr <- rep(-100, l+treeCons$Nnode)
-descL <- sapply(Descendants(treeCons, seq(l+treeCons$Nnode)), length)
-obj <- mcols(yAggConsNS)[["meanInfRV"]] + gamma*node.depth(treeCons,2)
-val <- findOptSum(treeCons, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.1"]][["Cons"]] <- findCuts(treeCons, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=0.1"]][["Cons"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons", Value = val,
-                  nCuts = length(dCutsD[["gamma=0.1"]][["Cons"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeMeanInf0$Nnode)
-descL <- sapply(Descendants(treeMeanInf0, seq(l+treeMeanInf0$Nnode)), length)
-obj <- mcols(yAggMeanInfNS0)[["meanInfRV"]] + gamma*node.depth(treeMeanInf0,2)
-gc()
-val <- findOptSum(treeMeanInf0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.1"]][["MeanInf0"]] <- findCuts(treeMeanInf0, globArr, obj, l+1, descL)
-length(dCutsD[["gamma=0.1"]][["MeanInf0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "MeanInf0", Value = val,
-                 nCuts = length(dCutsD[["gamma=0.1"]][["MeanInf0"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-gc()
-
-globArr <- rep(-100, l+treeCor$Nnode)
-descL <- sapply(Descendants(treeCor, seq(l+treeCor$Nnode)), length)
-obj <- mcols(yAggCorNS)[["meanInfRV"]]  + gamma*node.depth(treeCor,2)
-gc()
-val <- findOptSum(treeCor, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.1"]][["Cor"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-length(dCutsD[["gamma=0.1"]][["Cor"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cor", Value = val,
-                 nCuts = length(dCutsD[["gamma=0.1"]][["Cor"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeThr$Nnode)
-descL <- sapply(Descendants(treeThr, seq(l+treeThr$Nnode)), length)
-obj <- mcols(yAggThrNS)[["meanInfRV"]]  + gamma*node.depth(treeThr,2)
-gc()
-val <- findOptSum(treeThr, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.1"]][["Thr"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-length(dCutsD[["gamma=0.1"]][["Thr"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "ConsThr", Value = val,
-                 nCuts = length(dCutsD[["gamma=0.1"]][["Thr"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-print(dfDepth)
-```
-
-#### Gamma 0.5
-```{r}
-gamma <- 0.5
-dCutsD[["gamma=0.5"]] <- list()
-
-globArr <- rep(-100, l+treeCons0$Nnode)
-descL <- sapply(Descendants(treeCons0, seq(l+treeCons0$Nnode)), length)
-obj <- mcols(yAggConsNS0)[["meanInfRV"]] + gamma*node.depth(treeCons0,2)
-val <- findOptSum(treeCons0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.5"]][["Cons0"]] <- findCuts(treeCons0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=0.5"]][["Cons0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons0", Value = val,
-       nCuts = length(dCutsD[["gamma=0.5"]][["Cons0"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeCons$Nnode)
-descL <- sapply(Descendants(treeCons, seq(l+treeCons$Nnode)), length)
-obj <- mcols(yAggConsNS)[["meanInfRV"]] + gamma*node.depth(treeCons,2)
-val <- findOptSum(treeCons, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.5"]][["Cons"]] <- findCuts(treeCons, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=0.5"]][["Cons"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons", Value = val,
-                  nCuts = length(dCutsD[["gamma=0.5"]][["Cons"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeMeanInf0$Nnode)
-descL <- sapply(Descendants(treeMeanInf0, seq(l+treeMeanInf0$Nnode)), length)
-obj <- mcols(yAggMeanInfNS0)[["meanInfRV"]] + gamma*node.depth(treeMeanInf0,2)
-val <- findOptSum(treeMeanInf0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.5"]][["MeanInf0"]] <- findCuts(treeMeanInf0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=0.5"]][["MeanInf0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "MeanInf0", Value = val,
-                 nCuts = length(dCutsD[["gamma=0.5"]][["MeanInf0"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeCor$Nnode)
-descL <- sapply(Descendants(treeCor, seq(l+treeCor$Nnode)), length)
-obj <- mcols(yAggCorNS)[["meanInfRV"]]  + gamma*node.depth(treeCor,2)
-val <- findOptSum(treeCor, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.5"]][["Cor"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=0.5"]][["Cor"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cor", Value = val,
-                 nCuts = length(dCutsD[["gamma=0.5"]][["Cor"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeThr$Nnode)
-descL <- sapply(Descendants(treeThr, seq(l+treeThr$Nnode)), length)
-obj <- mcols(yAggThrNS)[["meanInfRV"]]  + gamma*node.depth(treeThr,2)
-gc()
-val <- findOptSum(treeThr, obj, l+1, descL)
-gc()
-dCutsD[["gamma=0.5"]][["Thr"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-length(dCutsD[["gamma=0.5"]][["Thr"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "ConsThr", Value = val,
-                 nCuts = length(dCutsD[["gamma=0.5"]][["Thr"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-print(dfDepth)
-```
-
-#### Gamma 1
-```{r}
-gamma <- 1
-dCutsD[["gamma=1"]] <- list()
-
-globArr <- rep(-100, l+treeCons0$Nnode)
-descL <- sapply(Descendants(treeCons0, seq(l+treeCons0$Nnode)), length)
-obj <- mcols(yAggConsNS0)[["meanInfRV"]] + gamma*node.depth(treeCons0,2)
-val <- findOptSum(treeCons0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=1"]][["Cons0"]] <- findCuts(treeCons0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma"]][["Cons0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons0", Value = val,
-       nCuts = length(dCutsD[["gamma=1"]][["Cons0"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeCons$Nnode)
-descL <- sapply(Descendants(treeCons, seq(l+treeCons$Nnode)), length)
-obj <- mcols(yAggConsNS)[["meanInfRV"]] + gamma*node.depth(treeCons,2)
-val <- findOptSum(treeCons, obj, l+1, descL)
-gc()
-dCutsD[["gamma=1"]][["Cons"]] <- findCuts(treeCons, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=1"]][["Cons"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons", Value = val,
-                  nCuts = length(dCutsD[["gamma=1"]][["Cons"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeMeanInf0$Nnode)
-descL <- sapply(Descendants(treeMeanInf0, seq(l+treeMeanInf0$Nnode)), length)
-obj <- mcols(yAggMeanInfNS0)[["meanInfRV"]] + gamma*node.depth(treeMeanInf0,2)
-val <- findOptSum(treeMeanInf0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=1"]][["MeanInf0"]] <- findCuts(treeMeanInf0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=1"]][["MeanInf0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "MeanInf0", Value = val,
-                 nCuts = length(dCutsD[["gamma=1"]][["MeanInf0"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeCor$Nnode)
-descL <- sapply(Descendants(treeCor, seq(l+treeCor$Nnode)), length)
-obj <- mcols(yAggCorNS)[["meanInfRV"]]  + gamma*node.depth(treeCor,2)
-val <- findOptSum(treeCor, obj, l+1, descL)
-gc()
-dCutsD[["gamma=1"]][["Cor"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=1"]][["Cor"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cor", Value = val,
-                 nCuts = length(dCutsD[["gamma=1"]][["Cor"]]), gamma=gamma))
-
-globArr <- rep(-100, l+treeThr$Nnode)
-descL <- sapply(Descendants(treeThr, seq(l+treeThr$Nnode)), length)
-obj <- mcols(yAggThrNS)[["meanInfRV"]]  + gamma*node.depth(treeThr,2)
-gc()
-val <- findOptSum(treeThr, obj, l+1, descL)
-gc()
-dCutsD[["gamma=1"]][["Thr"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-length(dCutsD[["gamma=1"]][["Thr"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "ConsThr", Value = val,
-                 nCuts = length(dCutsD[["gamma=1"]][["Thr"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-print(dfDepth)
-```
-
-#### Gamma 5
-```{r}
-gamma <- 5
-dCutsD[["gamma=5"]] <- list()
-
-globArr <- rep(-100, l+treeCons0$Nnode)
-descL <- sapply(Descendants(treeCons0, seq(l+treeCons0$Nnode)), length)
-obj <- mcols(yAggConsNS0)[["meanInfRV"]] + gamma*node.depth(treeCons0,2)
-val <- findOptSum(treeCons0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=5"]][["Cons0"]] <- findCuts(treeCons0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=5"]][["Cons0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons0", Value = val,
-       nCuts = length(dCutsD[["gamma=5"]][["Cons0"]]), gamma=gamma))
-
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeCons$Nnode)
-descL <- sapply(Descendants(treeCons, seq(l+treeCons$Nnode)), length)
-obj <- mcols(yAggConsNS)[["meanInfRV"]] + gamma*node.depth(treeCons,2)
-val <- findOptSum(treeCons, obj, l+1, descL)
-gc()
-dCutsD[["gamma=5"]][["Cons"]] <- findCuts(treeCons, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=5"]][["Cons"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cons", Value = val,
-                  nCuts = length(dCutsD[["gamma=5"]][["Cons"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeMeanInf0$Nnode)
-descL <- sapply(Descendants(treeMeanInf0, seq(l+treeMeanInf0$Nnode)), length)
-obj <- mcols(yAggMeanInfNS0)[["meanInfRV"]] + gamma*node.depth(treeMeanInf0,2)
-val <- findOptSum(treeMeanInf0, obj, l+1, descL)
-gc()
-dCutsD[["gamma=5"]][["MeanInf0"]] <- findCuts(treeMeanInf0, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=5"]][["MeanInf0"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "MeanInf0", Value = val,
-                 nCuts = length(dCutsD[["gamma=5"]][["MeanInf0"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeCor$Nnode)
-descL <- sapply(Descendants(treeCor, seq(l+treeCor$Nnode)), length)
-obj <- mcols(yAggCorNS)[["meanInfRV"]]  + gamma*node.depth(treeCor,2)
-val <- findOptSum(treeCor, obj, l+1, descL)
-gc()
-dCutsD[["gamma=5"]][["Cor"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-gc()
-length(dCutsD[["gamma=5"]][["Cor"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "Cor", Value = val,
-                 nCuts = length(dCutsD[["gamma=5"]][["Cor"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-globArr <- rep(-100, l+treeThr$Nnode)
-descL <- sapply(Descendants(treeThr, seq(l+treeThr$Nnode)), length)
-obj <- mcols(yAggThrNS)[["meanInfRV"]]  + gamma*node.depth(treeThr,2)
-gc()
-val <- findOptSum(treeThr, obj, l+1, descL)
-gc()
-dCutsD[["gamma=5"]][["Thr"]] <- findCuts(treeCor, globArr, obj, l+1, descL)
-length(dCutsD[["gamma=5"]][["Thr"]])
-dfDepth <- rbind(dfDepth, data.frame(Type = "ConsThr", Value = val,
-                 nCuts = length(dCutsD[["gamma=5"]][["Thr"]]), gamma=gamma))
-save(dCutsD, file=file.path(save_dir, "cutsDepth.RData"))
-
-print(dfDepth)
+        gc()
+        dCutsDInf[[j]][[i]] <- findCuts(trees[[i]], globArr, obj, l+1, descL)
+        gc()
+        dfInf <- rbind(dfInf, data.frame(Type = names(trees)[i], Value = val,
+               nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
+    }
+    i <- length(yAgg)+1
+    dCutsDInf[[j]][[i]] <- 1:l
+    dfInf <- rbind(dfInf, data.frame(Type = "Txps", Value = sum(obj[1:l]),
+               nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
+}
+print(dfInf)
+save(dfInf, file=file.path(save_dir, "dfInf.RData"))
+save(dCutsDInf, file=file.path(save_dir, "dCutsDInf.RData"))
 ```

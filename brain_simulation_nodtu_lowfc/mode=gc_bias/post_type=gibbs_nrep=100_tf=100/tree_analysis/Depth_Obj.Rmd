@@ -16,86 +16,89 @@ suppressPackageStartupMessages(source("tree_helper_function.R"))
 load("environment/brain_sim_nodtu/mode=gc_bias/mapDf.RData")
 load(file.path(dir, "treeCons.RData"))
 load(file.path(dir, "yAggConsNS.RData"))
-# load(file.path(dir, "treeCor.RData"))
-# load(file.path(dir, "yAggCorNS.RData"))
-# load(file.path(dir, "treeCons0.RData"))
-# load(file.path(dir, "yAggConsNS0.RData"))
-# load(file.path(dir, "treeMeanInf0.RData"))
-# load(file.path(dir, "yAggMeanInfNS0.RData"))
-# load(file.path(dir, "treeThr.RData"))
-# load(file.path(dir, "yAggThrNS.RData"))
+load(file.path(dir, "treeCor.RData"))
+load(file.path(dir, "yAggCorNS.RData"))
+load(file.path(dir, "treeCons0.RData"))
+load(file.path(dir, "yAggConsNS0.RData"))
+load(file.path(dir, "treeMeanInf0.RData"))
+load(file.path(dir, "yAggMeanInfNS0.RData"))
+load(file.path(dir, "treeThr.RData"))
+load(file.path(dir, "yAggThrNS.RData"))
 suppressPackageStartupMessages(source("brain_simulation_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/tree_analysis/tree_filter.R"))
 ```
 
 ```{r}
-# dfInf <- data.frame(matrix(nrow=0, ncol=4))
-# colnames(dfInf) <- c("Type", "Value", "nCuts", "gamma")
-# 
-# l <- length(treeCons$tip)
-# trees <- list(treeCons, treeCons0, treeMeanInf0, treeCor, treeThr)
-# names(trees) <-  c("ConsInd", "Cons", "Mean", "AC", "ConsRedInd")
-# yAgg <- list(yAggConsNS, yAggConsNS0, yAggMeanInfNS0, yAggCorNS, yAggThrNS)
-# names(yAgg) <- c("ConsInd", "Cons", "Mean", "AC", "ConsRedInd")
-# gammas <- c(0.1,0.5,1,5,10)
-# dCutsDInf <- vector(mode = "list", length=length(gammas))
-# names(dCutsDInf) <- paste("gamma=", gammas, sep="")
-# for(j in seq_along(dCutsDInf)) {
-#     gamma <- gammas[j]
-#     dCutsDInf[[j]] <- vector(mode="list", length(trees))
-#     names(dCutsDInf[[j]]) <- names(trees)
-#     for(i in seq(trees)) {
-#         globArr <- rep(-100, l+trees[[i]]$Nnode)
-#         descL <- sapply(Descendants(trees[[i]], seq(l+trees[[i]]$Nnode)), length)
-#         infReps <- assays(yAgg[[i]])[grep("infRep", assayNames(yAgg[[i]]))]
-#         infReps <- abind::abind(as.list(infReps), along = 3)
-#         obj <- mcols(yAgg[[i]])[["meanInfRV"]] + gamma*node.depth(trees[[i]],2)
-#         val <- findOptSum(trees[[i]], obj, l+1, descL)
-# 
-#         gc()
-#         dCutsDInf[[j]][[i]] <- findCuts(trees[[i]], globArr, obj, l+1, descL)
-#         gc()
-#         dfInf <- rbind(dfInf, data.frame(Type = names(trees)[i], Value = val,
-#                nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
-#     }
-    # i <- length(yAgg)+1
-    # dCutsDInf[[j]][[i]][1:l]
-    # dfInf <- rbind(dfInf, data.frame(Type = "Txps", Value = obj[1:l],
-    #            nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
-# }
-# print(dfInf)
-# save(dfInf, file=file.path(dir, "dfInf.RData"))
-# save(dCutsDInf, file=file.path(dir, "dCutsDInf.RData"))
-```
+dfInf <- data.frame(matrix(nrow=0, ncol=4))
+colnames(dfInf) <- c("Type", "Value", "nCuts", "gamma")
 
-```{r}
-load(file.path(dir, "dfInf.RData"))
-load(file.path(dir, "dCutsDInf.RData"))
+gammas <- c(0.05, 0.1,0.5,1,5,10)
+dCutsDInf <- vector(mode = "list", length=length(gammas))
+names(dCutsDInf) <- paste("gamma=", gammas, sep="")
+
 l <- length(treeCons$tip)
-trees <- list(treeCons)
-names(trees) <-  c("ConsInd")
-yAgg <- list(yAggConsNS)
-names(yAgg) <- c("ConsInd")
-gammas <- c(0.1,0.5,1,5,10)
+types <- c("ConsFilt", "Cons", "Mean", "AC", "ConsFiltES")
+trees <- list(treeCons, treeCons0, treeMeanInf0, treeCor, treeThr)
+names(trees) <- types
+yAgg <- list(yAggConsNS, yAggConsNS0, yAggMeanInfNS0, yAggCorNS, yAggThrNS)
+names(yAgg) <- types
 
-infReps <- assays(yAggConsNS)[grep("infRep", assayNames(yAggConsNS))]
-infReps <- abind::abind(as.list(infReps), along = 3)
-i <- 6
 for(j in seq_along(dCutsDInf)) {
     gamma <- gammas[j]
-    obj <- mcols(yAggConsNS)[["meanInfRV"]] + gamma
-    
+    dCutsDInf[[j]] <- vector(mode="list", length(trees)+1)
+    names(dCutsDInf[[j]]) <- c(names(trees), "Txps")
+    for(i in seq(trees)) {
+        globArr <- rep(-100, l+trees[[i]]$Nnode)
+        descL <- sapply(Descendants(trees[[i]], seq(l+trees[[i]]$Nnode)), length)
+        infReps <- assays(yAgg[[i]])[grep("infRep", assayNames(yAgg[[i]]))]
+        infReps <- abind::abind(as.list(infReps), along = 3)
+        obj <- mcols(yAgg[[i]])[["meanInfRV"]] + gamma*node.depth(trees[[i]],2)
+        val <- findOptSum(trees[[i]], obj, l+1, descL)
+
+        gc()
+        dCutsDInf[[j]][[i]] <- findCuts(trees[[i]], globArr, obj, l+1, descL)
+        gc()
+        dfInf <- rbind(dfInf, data.frame(Type = names(trees)[i], Value = val,
+               nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
+    }
+    i <- length(yAgg)+1
     dCutsDInf[[j]][[i]] <- 1:l
     dfInf <- rbind(dfInf, data.frame(Type = "Txps", Value = sum(obj[1:l]),
-               nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
+               nCuts = l, gamma=gamma))
 }
-for(i in seq_along(dCutsDInf))
-    names(dCutsDInf[[i]]) <- c("ConsInd", "Cons", "Mean", "AC", "ConsRedInd", "Txps")
-dfInf$Type[dfInf$Type=="Consensus"]="ConsInd"
-dfInf$Type[dfInf$Type=="Consensus0"]="Cons"
-dfInf$Type[dfInf$Type=="MeanInf0"]="Mean"
-dfInf$Type[dfInf$Type=="Cor"]="AC"
-dfInf$Type[dfInf$Type=="Thr"]="ConsRedInd"
 print(dfInf)
 save(dfInf, file=file.path(dir, "dfInf.RData"))
 save(dCutsDInf, file=file.path(dir, "dCutsDInf.RData"))
+```
+
+```{r}
+# load(file.path(dir, "dfInf.RData"))
+# load(file.path(dir, "dCutsDInf.RData"))
+# l <- length(treeCons$tip)
+# trees <- list(treeCons)
+# names(trees) <-  c("ConsInd")
+# yAgg <- list(yAggConsNS)
+# names(yAgg) <- c("ConsInd")
+# gammas <- c(0.1,0.5,1,5,10)
+# 
+# infReps <- assays(yAggConsNS)[grep("infRep", assayNames(yAggConsNS))]
+# infReps <- abind::abind(as.list(infReps), along = 3)
+# i <- 6
+# for(j in seq_along(dCutsDInf)) {
+#     gamma <- gammas[j]
+#     obj <- mcols(yAggConsNS)[["meanInfRV"]] + gamma
+#     
+#     dCutsDInf[[j]][[i]] <- 1:l
+#     dfInf <- rbind(dfInf, data.frame(Type = "Txps", Value = sum(obj[1:l]),
+#                nCuts = length(dCutsDInf[[j]][[i]]), gamma=gamma))
+# }
+# for(i in seq_along(dCutsDInf))
+#     names(dCutsDInf[[i]]) <- c("ConsInd", "Cons", "Mean", "AC", "ConsRedInd", "Txps")
+# dfInf$Type[dfInf$Type=="Consensus"]="ConsInd"
+# dfInf$Type[dfInf$Type=="Consensus0"]="Cons"
+# dfInf$Type[dfInf$Type=="MeanInf0"]="Mean"
+# dfInf$Type[dfInf$Type=="Cor"]="AC"
+# dfInf$Type[dfInf$Type=="Thr"]="ConsRedInd"
+# print(dfInf)
+# save(dfInf, file=file.path(dir, "dfInf.RData"))
+# save(dCutsDInf, file=file.path(dir, "dCutsDInf.RData"))
 ```
