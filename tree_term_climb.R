@@ -22,13 +22,13 @@ computeInfRVDiff <- function(tree, y)
 }
 
 getInfReps <- function(ys) {
-    
+
     infRepError <- function(infRepIdx) {
         if (length(infRepIdx) == 0) {
             stop("there are no inferential replicates in the assays of 'y'")
         }
     }
-    
+
     infRepIdx <- grep("infRep",assayNames(ys))
     infRepError(infRepIdx)
     infReps <- assays(ys)[infRepIdx]
@@ -41,7 +41,7 @@ computeSign <- function(y, x, pc = 5, minP = 0.7) {
     stopifnot(is.factor(condition))
     stopifnot(nlevels(condition) == 2)
     stopifnot(!anyNA(condition))
-    
+
     dims <- dim(infRepsArray)
     cond1 <- condition == levels(condition)[1]
     cond2 <- condition == levels(condition)[2]
@@ -61,7 +61,7 @@ computeSign <- function(y, x, pc = 5, minP = 0.7) {
 estimatePThresh <- function(y, adjPval = 0.05, type = "BH") {
     library(fdrtool)
     pvalues <- c()
-    if(class(y)[1] == "RangedSummarizedExperiment" | class(y)[1] == "SummarizedExperiment")
+    if(is(y, "SummarizedExperiment"))
         pvalues <- mcols(y)[["pvalue"]]
     else{
         if(class(y) == "numeric")
@@ -69,7 +69,7 @@ estimatePThresh <- function(y, adjPval = 0.05, type = "BH") {
         else
             stop("invalid class")
     }
-        
+
     if(type=="BH") {
         adPval <- which.min(abs(p.adjust(pvalues, method = "BH") - adjPval))
         return(pvalues[adPval])
@@ -79,8 +79,8 @@ estimatePThresh <- function(y, adjPval = 0.05, type = "BH") {
         fdrIn <- which.min(abs(fdrtool(pvalues, statistic="pvalue")[["lfdr"]] - adjPval))
         return(pvalues[fdrIn])
     }
-        
-    
+
+
 }
 
 checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, temp = F)
@@ -97,7 +97,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, 
         descPVal <- nodeSig[desc]
         descNA <- which(is.na(descPVal))
         descPVal <- descPVal[setdiff(seq_along(descPVal), descNA)]
-        
+
         if(all(!descPVal)) ## All are non signficant
         #if(any(!descPVal) | length(descNA) > 0) ## Any node is non significant
         {
@@ -120,7 +120,7 @@ checkGoUp <- function(parent, desc, children, signs, mInfRV, minInfRV, nodeSig, 
          #   print("significant")
             return(F)
         }
-            
+
     }
     else
     {
@@ -137,7 +137,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
     mCount <- rowMeans(assays(y)[["counts"]])
     mCCut = tryCatch( {
             cut(mCount, breaks = quantile(mCount, 0:mCountBin/mCountBin), include.lowest = T)
-    }, 
+    },
     error=function(cond) {
         message("Changing bins to 2 since 4 gave an error")
         return(cut(mCount, breaks = quantile(mCount, 0:2/2), include.lowest = T))
@@ -147,7 +147,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
                      levels, pvalue = mcols(y)[["pvalue"]], infRVs = mcols(y)[["meanInfRV"]], mCount = mCount)
     if(group)
         df[["group"]] <- factor(paste(df[["IRVCut"]], df[["mCCut"]]))
-    
+
     ## Splitting the nodes into folds, such that each fold contains equal amount of root child txps and inner nodes
     rChildNodes <- Descendants(tree, length(tree$tip.label)+1, "children") ### Root child nodes
     folds <- rep(1, nrow(y))
@@ -157,7 +157,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
     ch <- cut(remChildNodes, breaks = quantile(remChildNodes, 0:5/5))
     ch[1] <- ch[2]
     d <- split(remChildNodes, ch)
-    
+
     ch2 <- cut(rParNodes, breaks = quantile(rParNodes, 0:5/5))
     ch2[1] <- ch2[2]
     d2 <- split(rParNodes, ch2)
@@ -165,7 +165,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
         #folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")))] <- i
         folds[c(d[[i]],unlist(Descendants(tree, d[[i]],"all")),d2[[i]])] <- i
     # print(table(folds))
-    
+
     ### For running on subset of y
     if(!is.null(inds))
     {
@@ -173,9 +173,9 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
             stop("Inds either not logical or does not have the same length as y")
         df <- df[inds,]
         folds <- folds[inds]
-        print(table(folds))    
+        print(table(folds))
     }
-    
+
     if(group){
         #print(table(df[["group"]]))
         resgroup <- ihw(pvalue ~ group, data = df, alpha = alpha, folds = folds,
@@ -203,7 +203,7 @@ doIHW <- function(y, tree, alpha, iRVBin = 4, mCountBin = 4, nbins=NULL, inds = 
 }
 
 
-runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 0.05, corr = "IHW", runType = c("a"), alphas = c(0.01, 0.05, 0.1), 
+runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 0.05, corr = "IHW", runType = c("a"), alphas = c(0.01, 0.05, 0.1),
                               compPThresh = T, cSign = T, cores = 1, temp = T, file=NULL, minP = 0.70)
 {
     library(qvalue)
@@ -212,7 +212,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
         stop(paste("Invalid correction type entered, should be either qvalue or IHW", corr))
     if(!runType %in% c("a", "b"))
         stop(paste("Invalid IHW type entered, should be either a or b", ihwType))
-    
+
     sols <- vector("list", length(alphas))
     names(sols) <- as.character(alphas)
     if(runType == "b")
@@ -238,9 +238,9 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
                 lfdr <- fdrtool(pvals[!naInds], statistic="pvalue")[["lfdr"]]
                 qvals[!naInds] <- lfdr
                 resAlphas <- list(list(qvalues = qvals))
-                
+
             }
-        
+
             resDfs <- list(data.frame(pvalue=mcols(y)[["pvalue"]], adj_pvalue=resAlphas[[1]][["qvalues"]], inds = seq(nrow(y))))
         }
         nSol <- mclapply(seq_along(alphas), function(i) {
@@ -249,7 +249,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
                 j=1
             runTreeTermAlpha(tree, y, cond, minInfRV, resDfs[[j]][["adj_pvalue"]], alphas[i], alphas[i], cSign = cSign, temp=temp,minP=minP)
         }, mc.cores = cores)
-        
+
         for(i in seq_along(alphas))
         {
             sols[[i]][["candNodeO"]] <- which(nSol[[i]][["candNode"]])
@@ -274,7 +274,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
         if (corr == "IHW") {
             resAlphas <- mclapply(seq_along(alphas), function(i) doIHW(y, tree, alphas[i], inds = nSol[[i]][["nodesLooked"]]), mc.cores = cores)
             gc()
-            resDfs <- lapply(seq_along(resAlphas), function(i) 
+            resDfs <- lapply(seq_along(resAlphas), function(i)
                 {
                     df <- as.data.frame(resAlphas[[i]])
                     df <- cbind(df, inds = which(nSol[[i]][["nodesLooked"]]))
@@ -296,7 +296,7 @@ runTreeTermAlphas <- function(tree, y, cond, minInfRV, pCutOff = 0.05, pChild = 
         }
         for(i in seq_along(alphas)) {
             sols[[i]][["candNodeO"]] <- intersect(which(nSol[[i]][["candNode"]]), resDfs[[i]][resDfs[[i]]$adj_pvalue <= alphas[i],"inds"])
-            
+
             # remNegNodes <- setdiff(which(nSol[["candNode"]]), sols[[i]][["candNodeO"]])
             remNegNodes <- setdiff(which(nSol[[i]][["candNode"]]), sols[[i]][["candNodeO"]])
             if(sum(sols[[i]][["negNode"]][remNegNodes]) > 0)
@@ -332,7 +332,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
     nodeSig <- rep(T, nrow(y)) ### node significant or not
     nodeSig[pvalue > pChild] = F
     nodeSig[is.na(pvalue)] = NA ### Setting pvalues for nodes to NA
-    
+
     candNode <- rep(F, nrow(y)) ### Nodes that would be the output
     nodesLooked <- rep(F, nrow(y)) ### Nodes that we have already gone over and wont be going over any further
     negNode <- rep(F, nrow(y)) ### Nodes that are output as negative
@@ -356,7 +356,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
             if(curNode==(length(tree$tip.label)+1))
                 break()
             p <- Ancestors(tree,curNode,"parent")
-            
+
             if(nodesLooked[p])
                 break()
             child <- unlist(Descendants(tree,p,"children"))
@@ -367,7 +367,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
                 if(mcols(y)[["meanInfRV"]][curNode] <= minInfRV)
                     break()
             }
-                
+
             if(!checkGoUp(p, desc, child, signs, mcols(y)[["meanInfRV"]], minInfRV, nodeSig, temp=temp))
             #if(!checkGoUp(p, desc, child, signs, mInfRV, infDiff, nodeSig))
                 break()
@@ -376,7 +376,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
         }
         #print(curNode)
         if(is.na(pvalue[curNode])) {
-            if(!naLooked[curNode]) 
+            if(!naLooked[curNode])
             {
                 naNode[curNode] <- T
                 naLooked[c(curNode,unlist(Descendants(tree, curNode, "all")))] <- T
@@ -387,7 +387,7 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
         else {
             negNode[curNode] <- T
             nodesLooked[c(curNode,unlist(Descendants(tree,curNode,"all")))] <- T ## not want to set right descendants of parent if not a candidate
-            
+
             if(foundCand)
             {
                 if(pvalue[curNode] <= pCutOff)
@@ -411,14 +411,14 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
     if(nInd < length(tree$tip)) {  ## leaf node that is significant
        if(is.na(mcols(yAll)[nInd,"pvalue"]))
            return(F)
-       if(mcols(yAll)[nInd,"pvalue"] < pCut) 
+       if(mcols(yAll)[nInd,"pvalue"] < pCut)
            return(T)
-    }  
-        
+    }
+
     desc <- unlist(Descendants(tree, nInd,  'all')) ## Inner nodes
     children <- Descendants(tree, nInd,  'child')
     #if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
-    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV    
+    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
         ##IS.NA()
             if(sum(is.na(mcols(yAll)[desc,"pvalue"])) > 0 | !all(mcols(yAll)[desc,"pvalue"] < pCut, na.rm=T)) {
                 if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
@@ -435,49 +435,49 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     # dNodes <- dNodes[sapply(Descendants(tree, dNodes),length) > 1]
     # dNodes <- dNodes[sapply(Descendants(tree, dNodes, "all"), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)>1)]
     # sums <- sapply(Descendants(tree, dNodes, "all"), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T))
-    # 
+    #
     # pNodes <- Descendants(tree, nrow(y)+1, "child")
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes),length) > 1]
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)==1)]
-    
+
     desc <- unlist(Descendants(tree, ind, "all"))
     sigNodes <- desc[which(mcols(yAll)[desc,"pvalue"] < pCut)]
     if(!is.na(mcols(yAll)[ind,"pvalue"])) {
         if(mcols(yAll)[ind,"pvalue"] < pCut & ind > length(tree$tip))
-            sigNodes <- c(ind, sigNodes)    
+            sigNodes <- c(ind, sigNodes)
     }
-    
+
     if(length(sigNodes) == 0)
         return(c())
     # names(mSigNodes) <- sigNodes
-    
+
     sigInn <- sort(sigNodes[sigNodes > length(tree$tip)])
     if(length(sigInn) == 0)
         return(sigNodes)
     sigCons <- c() ##sigNodes that are non overlapping
     sigLeft <- sigInn
-    
+
     #descSig <- Descendants(tree, sigInn, "all")
     #print(paste("sigLeft", sigLeft))
     while(length(sigLeft) > 0) {
         sigCons <- c(sigCons, sigLeft[1])
         sigLeft <- setdiff(sigLeft, c(sigLeft[1],unlist(Descendants(tree,sigLeft[1], "all"))))
     }
-    
+
     sigCondD <- unlist(Descendants(tree, sigCons,"all"))
     sigCons <- c(sigCons, setdiff(sigNodes,c(sigCons,sigCondD)))
     # print(sigNodes)
     # print(sigCons)
     nodes <- lapply(sigCons, function(ind) findTNode(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs))
-    
+
     return(unlist(nodes))
 }
 
 findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
-    
+
     if(length(intersect(c(ind,unlist(Descendants(tree, ind, "all"))), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
         return(c())
-    
+
     #print(sigNodes)
     if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
         return(ind)
@@ -497,7 +497,7 @@ climbMax <- function(y, tree, mIRVCut, alpha, minP=0.80, cores=1) {
     innNodes <- setdiff(cNodes, leaves)
     descN <- Descendants(tree, innNodes, "all")
     descN <- innNodes[sapply(descN, function(nodes) sum(mcols(y)[nodes,"pvalue"] < pThresh, na.rm=T)>0)]
-    
+
     sigs <- unlist(mclapply(descN, function(node) findCNodes(y, tree, node, pThresh, mIRVCut, signs), mc.cores=cores))
     sigNodes <- c(sigNodes, sigs)
     return(sigNodes)
