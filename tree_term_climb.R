@@ -419,6 +419,7 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
     children <- Descendants(tree, nInd,  'child')
     #if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
     if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
+       
         ##IS.NA()
             if(sum(is.na(mcols(yAll)[desc,"pvalue"])) > 0 | !all(mcols(yAll)[desc,"pvalue"] < pCut, na.rm=T)) {
                 if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
@@ -469,7 +470,8 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     # print(sigNodes)
     # print(sigCons)
     nodes <- lapply(sigCons, function(ind) findTNode(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs))
-
+    if(sum(is.na(unlist(nodes))) > 0)
+      print(ind)
     return(unlist(nodes))
 }
 
@@ -485,19 +487,21 @@ findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
     nodes <- c()
     for(child in children)
         nodes <- c(nodes,findTNode(yAll, tree, child, sigNodes, pCut, mIRVCut, signs))
+    if(sum(is.na(nodes))) {
+      print(ind)
+    }
     return(nodes)
 }
 
-climbMax <- function(y, tree, mIRVCut, alpha, minP=0.80, cores=1) {
+climbMax <- function(y, tree, mIRVCut, alpha, signs, minP=0.80, cores=1) {
     l <- length(tree$tip)
     pThresh <- estimatePThresh(y, alpha)
     cNodes <- Descendants(tree, l+1, "child")
     leaves <- cNodes[cNodes <= l]
-    sigNodes <- leaves[mcols(y)[leaves, "pvalue"] <= pThresh]
+    sigNodes <- leaves[which(mcols(y)[leaves, "pvalue"] <= pThresh)]
     innNodes <- setdiff(cNodes, leaves)
     descN <- Descendants(tree, innNodes, "all")
     descN <- innNodes[sapply(descN, function(nodes) sum(mcols(y)[nodes,"pvalue"] < pThresh, na.rm=T)>0)]
-
     sigs <- unlist(mclapply(descN, function(node) findCNodes(y, tree, node, pThresh, mIRVCut, signs), mc.cores=cores))
     sigNodes <- c(sigNodes, sigs)
     return(sigNodes)
