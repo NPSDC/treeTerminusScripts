@@ -1,0 +1,81 @@
+---
+title: "Tree DE"
+output: html_document
+date: "2023-02-01"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading TSE experiment
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505/sal_out/mode_gcbias=True/posttype=gibbs_npost=100_tf=100"
+metaData <- read.delim("/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505/SRR_Acc_List.txt")
+samples <- metaData$RUN
+files <- file.path(quantDir, samples, "quant.sf")
+colData <- cbind(data.frame(files = files, names = samples), condition = as.factor(metaData$TissueName))
+clustFile <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505/term_out/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/no_threshold0/cluster_nwk.txt"
+saveDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/real_datasets/GSE100505/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/comp_trees/DE"
+#tseCons <- buildTSE(treeTermFile = clustFile, coldata = colData)
+load(file.path(saveDir, "tseCons.RData"))
+```
+
+#### Loading Terminus
+```{r}
+suppressPackageStartupMessages(source("old_terminus_helper.R"))
+termDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505/term_out/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/old"
+tree <- rowTree(tseCons)
+l <- length(tree$tip)
+termGroupDf <- read.delim(file.path(termDir, "SRR5758624", "clusters.txt"), header=F)
+termTxps <- unlist(sapply(strsplit(termGroupDf$V1, split = ",", fixed = T), function(x) x[2:length(x)]))
+
+if(!all(termTxps %in% rownames(tseCons)[1:l])) {
+    txps <- union(rownames(tse)[1:l], unlist(termTxps))
+    tseCons <- buildTSE(treeTermFile = clustFile, coldata = colData, txps = txps)
+}
+save(tseCons, file=file.path(saveDir, "tseCons.RData"))
+tree <- rowTree(tse)
+l <- length(tree$tip)
+```
+
+#### Swish on the entire dataset 
+```{r}
+yAll <- computeSizeFactors(tseCons)
+yAll <- scaleInfReps(yAll)
+yAll <- labelKeep(yAll)
+set.seed(1)
+yAll <- swish(yAll, x = "condition")
+```
+
+#### Distribution of signs and levels
+```{r}
+#mIRV_cut <- cut(mIRVDiff[nLeaf+1:tree$Nnode], breaks = quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0:4/4), include.lowest = T)
+#print(table(mIRV_cut))
+#termThresh <- quantile(mIRVDiff[nLeaf+1:tree$Nnode], 0.75)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+#### Running 
+```{r}
+tAfterBHMoreClimbMIRV <- list() ## These are with mIRV criteria on child only
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0, alpha, signs, cores=3), mc.cores=3)))
+save(tAfterBHMoreClimbMIRV, file = file.path(saveDir, "tAfterBHMoreClimbMIRV.RData"))
+
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0.4, alpha, signs, cores=3), mc.cores=3)))
+save(tAfterBHMoreClimbMIRV, file = file.path(saveDir, "tAfterBHMoreClimbMIRV.RData"))
+
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=1"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 1, alpha, signs, cores=3), mc.cores=3)))
+save(tAfterBHMoreClimbMIRV, file = file.path(saveDir, "tAfterBHMoreClimbMIRV.RData"))
+```
