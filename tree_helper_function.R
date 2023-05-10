@@ -9,17 +9,18 @@ library(parallel)
 library(DESeq2)
 
 ### Correcting for batch effects
-corrBESwish <- function(se, samples, fit)
+corrBESwish <- function(se, samples, fit, condition = "condition")
 {
   y <- se[,!(colnames(se) %in% samples)]
-  print(dim(y))
+  if(is(y[[condition]], "factor"))
+          y[[condition]] <- droplevels(y[[condition]])
+  y[[condition]] <- factor(y[[condition]])
   y <- scaleInfReps(y, saveMeanScaled=TRUE)
-  print(dim(y))
   
   infRepIdx <- grep("infRep",assayNames(y),value=TRUE)
   nreps <- length(infRepIdx)
   
-  mm <- model.matrix(~condition, colData(y))
+  mm <- model.matrix(formula(paste("~", condition)), colData(y))
   
   pc <- .1
   for (k in seq_len(nreps)) {
@@ -31,7 +32,8 @@ corrBESwish <- function(se, samples, fit)
     assay(y, infRepIdx[k]) <- exp(logInfRep)
   }
   gc()
-  y <- swish(y, x="condition")
+  
+  y <- swish(y, x=condition)
   y
 }
 
@@ -702,17 +704,23 @@ fixDf <- function(df) {
 }
 
 ### root of the mean (over features) of squared differences across the mean (over samples) log2 abundance per condition
-computeDeseqInf <- function(y, tNodes) {
+computeDeseqInf <- function(y, tNodes = c(), retTPM = F) {
   tpm <- assays(y)[["abundance"]]
   sf <- DESeq2::estimateSizeFactorsForMatrix(tpm)
   logScaledTpm <- log2(t(t(tpm)/sf)+1)
-  mC1 <- rowMeans(logScaledTpm[,colData(y)[["condition"]]==1]) ##mean condition 1
-  mC2 <- rowMeans(logScaledTpm[,colData(y)[["condition"]]==2]) ##mean condition 2
+  colData(y)[["condition"]] <- as.factor(colData(y)[["condition"]])
+  cond1 <- colData(y)[["condition"]] == levels(colData(y)[["condition"]])[1]
+  cond2 <- colData(y)[["condition"]] == levels(colData(y)[["condition"]])[2]
+  
+  mC1 <- rowMeans(logScaledTpm[,cond1]) ##mean condition 1
+  mC2 <- rowMeans(logScaledTpm[,cond2]) ##mean condition 2
   diff <- (mC2 - mC1)^2
   if(class(tNodes) == "list")
     tNodes <- c(tNodes[["candNodeO"]], tNodes[["negNodeO"]], tNodes[["naNodeO"]])
   else
     tNodes <- tNodes
+  if(retTPM)
+    return(diff)
   return(sqrt(mean(diff[tNodes])))
 }
 

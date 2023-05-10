@@ -1,0 +1,39 @@
+---
+title: "moreClimbCons.Rmd"
+output: html_document
+date: "2023-02-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Constructing TSE
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+
+saveDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/Chimp/DE"
+load(file = file.path(saveDir, "yAll.RData"))
+```
+
+```{r}
+treeCons <- rowTree(yAll)
+signs <- computeSign(yAll, "tissue")
+print(table(signs))
+levels <- node.depth(treeCons, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+#### Running climbing procedure
+```{r}
+tAfterBHMoreClimbMIRV <- list() ## These are with mIRV criteria on child only
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, treeCons, 0.4, alpha, signs, cores=3), mc.cores=3)))
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0.3"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, treeCons, 0.3, alpha, signs, cores=3), mc.cores=3)))
+save(tAfterBHMoreClimbMIRV, file = file.path(saveDir, "tAfterBHMoreClimbMIRV.RData"))
+```

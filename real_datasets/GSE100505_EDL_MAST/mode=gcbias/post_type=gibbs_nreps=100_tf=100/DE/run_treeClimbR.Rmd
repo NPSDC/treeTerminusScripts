@@ -1,0 +1,55 @@
+---
+title: "Run TreeClimbR"
+output: html_document
+date: "2023-02-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading TSE experiment
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+suppressPackageStartupMessages(library(treeclimbR))
+saveDir <- "environment/real_datasets/GSE100505_EDL_MAST/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/DE"
+load(file=file.path(saveDir, "tseConsUp.RData"))
+tree <- rowTree(tseConsUp)
+```
+
+#### Swish on the entire dataset 
+```{r}
+yAll <- computeSizeFactors(tseConsUp)
+yAll <- scaleInfReps(yAll)
+yAll <- labelKeep(yAll)
+set.seed(1)
+yAll <- swish(yAll, x = "condition")
+
+swishRes <- data.frame(mcols(yAll))
+swishRes$node <- seq(1:nrow(yAll))
+swishRes <- swishRes[,-c(3)]
+
+print(system.time(cSwish <- getCand(tree,
+                 score_data = swishRes,
+                 node_column = "node",
+                 p_column = "pvalue",
+                 sign_column = "log2FC",
+                 )))
+save(cSwish, file=file.path(saveDir, "cSwishCons.RData"))
+gc()
+```
+
+```{r}
+# gc()
+bSwish <- lapply(c(0.01,0.05,0.1), function(alpha) {
+    evalCand(tree = tree, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=alpha)
+})
+
+save(bSwish, file=file.path(saveDir, "bSwishCons.RData"))
+```
