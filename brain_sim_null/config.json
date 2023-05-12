@@ -1,0 +1,32 @@
+{
+    "exp_directory":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_null",
+    "read_path":"reads_fastq",
+
+    "replicates":[1,2,3,4,5,6],
+    
+    "sim_exp_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_sim_null/simulate_null_expression.R",
+    "sim_read_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_sim_null/simulate_reads.R",
+    "sim_save_dir":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_null/sim_inp",
+    
+    "lib_size":40e6,
+    "nsampgenes":30000,
+
+    "keep_dup":false,
+    "gc_bias":true,
+
+    "txp_fasta":"annotation/gencode.v26.transcripts.short.names.fa",
+    
+    "shuff_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_sim_null/shuffle.sh",
+    "shuff_wrapper_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_sim_null/shuffle_wrapper.sh",
+
+    "posterior_type":"gibbs",
+    "thinning_factor":100,
+    "nreplicates":100,
+    "sal_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/Chimpanzee/no_thresh_boot/.snakemake/conda/b5dc9e9ebd55a53225f40312a659f7a2/bin/salmon",
+    "sal_ind_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation/sal_ind_nodup",
+    "out_sal_path":"out_sal",
+
+    "term_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/terminus",
+    "treeterm_path":"/fs/cbcb-lab/rob/students/noor/Uncertainity/TreeTerminus"
+
+}

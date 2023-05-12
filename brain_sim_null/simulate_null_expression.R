@@ -3,7 +3,7 @@ args <- commandArgs(trailingOnly = TRUE)
 print(args)
 libSize <- as.numeric(args[1])
 nsampgenes <- as.numeric(args[2])
-cortex_tpm <- read.delim("../brain_simulation/frontal_cortex.tsv.gz", skip=2)
+cortex_tpm <- read.delim("/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_simulation/frontal_cortex.tsv.gz", skip=2)
 seed <- as.numeric(args[3])
 saveDir <- args[4]
 dataDir <- args[5]
@@ -55,6 +55,7 @@ set.seed(seed)
 
 exprs.txs <- rownames(quantsUp)[quantsUp$TPM > 0]
 exprs.genes <- unique(txdf$GENEID[match(exprs.txs, txdf$TXNAME)])
+nsampgenes <- ifelse(nsampgenes > 15000, length(exprs.genes), nsampgenes)
 samp.genes <- sample(exprs.genes, nsampgenes)
 samp.txps <- txdf[txdf$GENEID %in% samp.genes,"TXNAME"]
 quantsUp[setdiff(rownames(quantsUp), samp.txps), c("TPM", "NumReads")]=0
@@ -85,7 +86,7 @@ writeXStringSet(txseq, file.path(saveDir, paste("transcripts_", seed, ".fa", sep
 
 
 sim.means <- rowMeans(sim.counts.mat)
-load("../brain_simulation/meanDispPairs/meanDispPairs.rda")
+load("/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_simulation/meanDispPairs/meanDispPairs.rda")
 match.idx <- sapply(sim.means, function(mu) {
  which.min(abs(mu - meanDispPairs$baseMean))
 })
@@ -100,7 +101,7 @@ summary(disps)
 summary(disps[sim.means > 1000])
 
 library(alpine)
-load("../brain_simulation/data/fitpar_all.rda")
+load("/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/brain_simulation/data/fitpar_all.rda")
 fitpar[[1]][["model.params"]]$gc.knots <- seq(from=.4, to=.6, length=3)
 fitpar[[1]][["model.params"]]$gc.bk <- c(0,1)
 # plotGC(fitpar, "all", col=rep(1:2,each=15))
@@ -114,8 +115,8 @@ sim_counts <- sim.counts.mat[,1]
 fold_changes <- rep(1, nrow(sim.counts.mat))
 save(fold_changes, tpms,
      txdf, sim.counts.mat, sim_counts,
-     disps, frag_GC_bias,
-     file=file.path(dataDir,"simulate.rda"))
+     disps, frag_GC_bias, samp.txps, samp.genes,
+     file=file.path(dataDir,paste("simulate_seed=", seed, ".rda", sep="")))
 
 library(devtools)
 si <- session_info()$packages

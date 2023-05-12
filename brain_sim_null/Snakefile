@@ -1,0 +1,254 @@
+import yaml
+from os.path import join
+
+with open('cluster_partition.conf', 'r') as f:
+    partitions = yaml.safe_load(f)
+
+def get_partition(rule_name):
+    return partitions[rule_name] if rule_name in partitions else partitions['__default__']
+
+sim_save_dir = config['sim_save_dir']
+seed = 10
+sim_rda = join(sim_save_dir, "simulate_seed="+str(seed)+".rda")
+txp_sim_fasta = join(sim_save_dir, "transcripts_"+str(seed)+".fa")
+
+exp_dir=config['exp_directory'] ##directory of experiment - aka where all subfolder will reside
+# ann_dir=config['ann_path']
+post_type=config["posterior_type"] ##specific type of posterior sampling gibbs or bootstrap
+REPLICATES=config['replicates']
+exp_gc_mode = str(exp_dir)
+gc_bias = True
+
+read_path=join(exp_gc_mode, config['read_path'], "seed=10") ##path where fastq files are stored
+read_fasta_file=join(read_path, "{rep}", "sample_0{cond}_{read}_shuffled.fa.gz")
+read_fasta_file_rgen=join(read_path, "{{rep}}", "sample_0{cond}_{read}.fasta")
+read_shuff_fasta_file_rgen=join(read_path, "{{rep}}", "sample_0{cond}_{read}_shuffled.fa.gz")
+read_fasta_file_sal=join(read_path, "{{rep}}", "sample_0{{cond}}_{read}_shuffled.fa.gz")
+
+keep_dup=False
+if "keep_dup" in config.keys():
+    keep_dup=config["keep_dup"]
+
+nrep=config["nreplicates"] ##number of posterior samples
+tf=16
+
+post_dir=join(exp_gc_mode, "post_type={}_nrep={}").format(post_type, nrep)
+if(post_type=="gibbs"):
+    tf=config["thinning_factor"]
+    post_dir=join(exp_gc_mode, "post_type={}_nrep={}_tf={}").format(post_type, nrep, tf)
+
+sal_dir = join(post_dir, config['out_sal_path'], "seed=10")
+sal_quant_dir = join(sal_dir, "{rep}_{cond}")
+sal_quant_file = join(sal_quant_dir, "quant.sf")
+
+sal_ind_path = join(exp_dir, config["sal_ind_path"])
+if config['sal_ind_path'].startswith("/"):
+    sal_ind_path = config["sal_ind_path"]
+
+read_fasta_file_pe1 = read_fasta_file_sal.format(read=1)
+read_fasta_file_pe2 = read_fasta_file_sal.format(read=2)
+
+term_dir = join(post_dir, "terminus", "seed=10")
+treeterm_nothr0_dir = join(term_dir, "no_threshold0")
+treeterm_mean_inf0_dir = join(term_dir, "no_threshold_meaninf_0")
+term_orig_dir = join(term_dir, "term") ### terminus
+
+treeterm_nothr0_sample = join(treeterm_nothr0_dir, "{rep}_{cond}")
+term_sample = join(term_orig_dir, "{rep}_{cond}")
+
+treeterm_nothr0_group = join(treeterm_nothr0_sample, "groups.txt")
+treeterm_mean_inf0_group = join(treeterm_mean_inf0_dir, "cluster_nwk.txt")
+term_group =  join(term_sample, "groups.txt")
+
+treeterm_nothr0_clust = join(treeterm_nothr0_dir, "cluster_nwk.txt")
+term_clust = join(term_sample, "clusters.txt")
+
+term_path = config["term_path"]
+treeterm_path = config["treeterm_path"]
+term_exec = join(config["term_path"], "target", "release", "terminus"),
+treeterm_exec = join(config["treeterm_path"], "target", "release", "treeterminus"),
+
+rule final_outputs:
+    input:
+        treeterm_nothr0_clust,
+        treeterm_mean_inf0_group,
+        expand(sal_quant_file, rep=REPLICATES, cond=[1,2]),
+        expand(read_fasta_file, rep=REPLICATES, cond=[1,2], read=[1,2])
+        # expand(term_clust, rep = REPLICATES, cond = [1,2])
+
+rule run_treeterm_mean_inf0:
+    input:sal_dir
+    output:treeterm_mean_inf0_group
+    params:
+        treeterm_path = treeterm_exec,
+        partition = get_partition('run_treeterm_mean_inf0'),
+        output = treeterm_mean_inf0_dir,
+    shell:
+        "{params.treeterm_path} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output}"
+
+rule run_treeterm_cons_nothr0:
+    input:
+        group_files = expand(treeterm_nothr0_group, rep = REPLICATES, cond = [1,2]),
+        quant_files = expand(sal_quant_dir, rep = REPLICATES, cond = [1,2])
+    output:treeterm_nothr0_clust
+    params:
+        treeterm_path = treeterm_exec,
+        input = sal_dir,
+        output = treeterm_nothr0_dir,
+        partition = get_partition('run_treeterm_cons_nothr0')
+    shell:
+        """
+            {params.treeterm_path} consensus -d {params.input} -o {params.output}
+        """        
+rule run_treeterm_group_nothr0:
+    input:
+        expand(treeterm_nothr0_group, rep = REPLICATES, cond = [1,2])
+rule _run_term_group_nothr0:
+    input:
+        sal_quant_dir
+    output:
+        treeterm_nothr0_group
+    params:
+        treeterm_path = treeterm_exec,
+        partition = get_partition('_run_term_group_nothr0'),
+        output = treeterm_nothr0_dir,
+
+    shell:
+        "{params.treeterm_path} group -d {input} -o {params.output} --mean_inf false"
+
+# rule run_term_collapse:
+#     input:
+#         inp_term = expand(term_group, rep = REPLICATES, cond = [1,2]),
+#         inp_sal = expand(sal_quant_dir, rep = REPLICATES, cond = [1,2])
+#     output:
+#         expand(term_clust,  rep = REPLICATES, cond = [1,2])
+#     params:
+#         output = term_orig_dir,
+#         term_exec = term_exec,
+#         partition = get_partition('run_term_collapse')
+#     shell:
+#         """
+#             source ~/.bashrc
+#             {params.term_exec} collapse -c 0.5 -d {input.inp_sal} -o {params.output}
+#         """
+# rule run_term_group:
+#     input:expand(term_group, rep = REPLICATES, cond = [1,2])
+
+# rule _run_term_group:
+#     input:sal_quant_dir
+#     output:term_group
+#     params:
+#         term_exec = term_exec,
+#         output = term_orig_dir,
+#         partition = get_partition('_run_term_group')
+#     shell:
+#         """
+#           source ~/.bashrc
+#           {params.term_exec} group -m 0.1 --tolerance 0.001 -d {input} -o {params.output}
+#         """
+
+rule run_salmon:
+    input:
+        expand(sal_quant_file, rep=REPLICATES, cond=[1,2])
+    params:
+        partition = get_partition('_run_salmon'),
+
+rule _run_salmon:
+    input:
+        inp_fastq1 = read_fasta_file_pe1,
+        inp_fastq2 = read_fasta_file_pe2,
+        index = join(sal_ind_path, "pos.bin")
+    output:
+        sal_quant_file
+    resources: cpus=8, mem=32000
+    params:
+        out_dir = sal_quant_dir,
+        partition = get_partition('_run_salmon'),
+        sal_path = config['sal_path'],
+        sal_ind = sal_ind_path,
+        nrep = nrep,
+        tf = tf
+    run:
+        if post_type == "gibbs":
+            if gc_bias:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
+                --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+            else:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} \
+                --numGibbsSamples {params.nrep} --thinningFactor {tf} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+            
+        else:
+            if gc_bias:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} --gcBias \
+                --numBootstraps {params.nrep} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+            else:
+                shell("{params.sal_path} quant -i {params.sal_ind} -l A -p {resources.cpus} \
+                --numBootstraps {params.nrep} -d \
+                -o {params.out_dir} -1 {input.inp_fastq1} -2 {input.inp_fastq2}")
+
+   
+
+rule all_reads:
+    input:
+        expand(read_fasta_file, rep=REPLICATES, cond=[1,2], read=[1,2])
+    params:
+        partition = get_partition('all_reads')
+
+rule shuf_reads:
+    input:
+        expand(read_fasta_file_rgen,  cond=[1,2], read=[1,2])
+    params:
+        shuf_file = config["shuff_path"],
+        shuf_wrapper_file = config["shuff_wrapper_path"],
+        read_path = join(read_path, "{rep}"),
+        partition = get_partition('shuf_reads')
+    output:
+        expand(read_shuff_fasta_file_rgen, cond=[1,2], read=[1,2])
+    shell:
+        """
+            bash {params.shuf_wrapper_file} {params.shuf_file} {params.read_path}
+        """
+
+rule make_reads:
+    input:
+        sim_rda=sim_rda,
+        sim_read_path=config["sim_read_path"],
+        fasta_path = txp_sim_fasta
+
+    params:
+        reads = "{rep}",
+        read_path = read_path,
+        seed = 10, #lambda wildcards:wildcards.seed,
+	    partition = get_partition('make_reads')
+    output:
+        expand(read_fasta_file_rgen,  cond=[1,2], read=[1,2])
+    shell:
+        """
+            source ~/.bashrc
+            conda activate R4.1
+            Rscript --vanilla {input.sim_read_path} {params.reads} {input.fasta_path} {params.read_path} {params.seed} {input.sim_rda}
+            conda deactivate
+        """
+
+rule sim_expression:
+    input:
+        sim=config["sim_exp_path"]
+    params:
+        libSize = config['lib_size'],
+        nsampgenes = config['nsampgenes'],
+        seed = lambda wildcards:wildcards.seed,
+        saveDir = sim_save_dir,
+        partition = get_partition('sim_expression')
+    output:
+        sim_rda = sim_rda,
+        txp_sim_fasta = txp_sim_fasta
+    shell:
+        """
+            source ~/.bashrc
+            conda activate R4.1
+            Rscript --vanilla {input.sim} {params.libSize} {params.nsampgenes} {params.seed} {params.saveDir} {params.saveDir}
+            conda deactivate
+        """
