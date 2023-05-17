@@ -1,4 +1,3 @@
-source("tree_helper_function.R")
 library(IHW)
 library(foreach)
 library(doParallel)
@@ -58,18 +57,10 @@ computeSign <- function(y, x, pc = 5, minP = 0.7) {
     return(signs)
 }
 
-estimatePThresh <- function(y, adjPval = 0.05, type = "BH") {
+estimatePThresh <- function(pvalues, adjPval = 0.05, type = "BH") {
     library(fdrtool)
-    pvalues <- c()
-    if(is(y, "SummarizedExperiment"))
-        pvalues <- mcols(y)[["pvalue"]]
-    else{
-        if(class(y) == "numeric")
-            pvalues <- y
-        else
-            stop("invalid class")
-    }
-
+    if(class(pvalues) != "numeric")
+        stop("pvalues not numeric")
     if(type=="BH") {
         adPval <- which.min(abs(p.adjust(pvalues, method = "BH") - adjPval))
         return(pvalues[adPval])
@@ -411,7 +402,7 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
     if(nInd < length(tree$tip)) {  ## leaf node that is significant
        if(is.na(mcols(yAll)[nInd,"pvalue"]))
            return(F)
-       if(mcols(yAll)[nInd,"pvalue"] < pCut)
+       if(mcols(yAll)[nInd,"pvalue"] <= pCut)
            return(T)
     }
 
@@ -420,10 +411,10 @@ meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
     #if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
     if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
         ##IS.NA()
-            if(sum(is.na(mcols(yAll)[desc,"pvalue"])) > 0 | !all(mcols(yAll)[desc,"pvalue"] < pCut, na.rm=T)) {
+            if(sum(is.na(mcols(yAll)[desc,"pvalue"])) > 0 | !all(mcols(yAll)[desc,"pvalue"] <= pCut, na.rm=T)) {
                 if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
                     return(T)
-                if(!all(mcols(yAll)[children,"pvalue"] < pCut))  ##all children cant be significant
+                if(!all(mcols(yAll)[children,"pvalue"] <= pCut))  ##all children cant be significant
                     return(T)
             }
     }
@@ -440,9 +431,9 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes),length) > 1]
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)==1)]
     desc <- unlist(Descendants(tree, ind, "all"))
-    sigNodes <- desc[which(mcols(yAll)[desc,"pvalue"] < pCut)]
+    sigNodes <- desc[which(mcols(yAll)[desc,"pvalue"] <= pCut)]
     if(!is.na(mcols(yAll)[ind,"pvalue"])) {
-        if(mcols(yAll)[ind,"pvalue"] < pCut & ind > length(tree$tip))
+        if(mcols(yAll)[ind,"pvalue"] <= pCut & ind > length(tree$tip))
             sigNodes <- c(ind, sigNodes)
     }
 
@@ -486,19 +477,24 @@ findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
         nodes <- c(nodes,findTNode(yAll, tree, child, sigNodes, pCut, mIRVCut, signs))
     if(sum(is.na(nodes))) {
       print(ind)
-    }
+}
     return(nodes)
 }
 
-climbMax <- function(y, tree, mIRVCut, alpha, signs, minP=0.80, cores=1) {
+climbMax <- function(pvalues, tree, mIRVCut, alpha, signs, minP=0.80, cores=1) {
+    stopifnot(length(pvalues) == (length(tree$tip) + length(tree$node.label)))
     l <- length(tree$tip)
     pThresh <- estimatePThresh(y, alpha)
+    if(sum(mcols(y)[["pvalue"]] <= pThresh, na.rm = T) == 0) {
+        message("no significant nodes found")
+        return(c())
+    }
     cNodes <- Descendants(tree, l+1, "child")
     leaves <- cNodes[cNodes <= l]
     sigNodes <- leaves[which(mcols(y)[leaves, "pvalue"] <= pThresh)]
     innNodes <- setdiff(cNodes, leaves)
     descN <- Descendants(tree, innNodes, "all")
-    descN <- innNodes[sapply(descN, function(nodes) sum(mcols(y)[nodes,"pvalue"] < pThresh, na.rm=T)>0)]
+    descN <- innNodes[sapply(descN, function(nodes) sum(mcols(y)[nodes,"pvalue"] <= pThresh, na.rm=T)>0)]
     sigs <- unlist(mclapply(descN, function(node) findCNodes(y, tree, node, pThresh, mIRVCut, signs), mc.cores=cores))
     sigNodes <- c(sigNodes, sigs)
     return(sigNodes)
