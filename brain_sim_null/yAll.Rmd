@@ -1,0 +1,66 @@
+---
+title: "yAll"
+output: html_document
+date: "2023-05-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+treeTermPath <- '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts'
+suppressPackageStartupMessages(source(file.path(treeTermPath, "tree_helper_function.R")))
+suppressPackageStartupMessages(source(file.path(treeTermPath, "tree_term_climb.R")))
+suppressPackageStartupMessages(library(beaveR))
+
+seed <- 10
+mainDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim_null/post_type=gibbs_nrep=100_tf=100"
+clustFile <- file.path(mainDir, "terminus", paste("seed",seed,sep="="), "no_threshold0", "cluster_nwk.txt")
+quantDir <- file.path(mainDir, "out_sal", paste("seed",seed,sep="="))
+samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep='_')))
+quantFiles <- file.path(quantDir, samples, 'quant.sf')
+coldata <- data.frame(files=quantFiles, names=samples, condition=factor(rep(1:2, each=6)))
+
+tse <- buildTSE(treeTermFile = clustFile, coldata = coldata)
+tree <- rowTree(tse)
+nl <- length(tree$tip)
+```
+
+```{r}
+y <- tse[1:nl,]
+y <- fishpond::scaleInfReps(y)
+print(hist(mcols(y)[["pvalue"]]))
+```
+
+```{r}
+yAll <- computeSizeFactors(tse)
+yAll <- scaleInfReps(yAll)
+yAll <- labelKeep(yAll)
+set.seed(1)
+yAll <- swish(yAll, x = "condition")
+print(hist(mcols(yAll)[["pvalue"]]))
+```
+
+```{r}
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(tree, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+```{r}
+saveDir <- ""
+tAfterBHMoreClimbMIRV <- list()
+print(system.time(tAfterBHMoreClimbMIRV[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(yAll, tree, 0.4, alpha, signs, cores=3), mc.cores=3)))
+save(tAfterBHMoreClimbMIRV, file = file.path(saveDir, "tAfterBHMoreClimbMIRV.RData"))
+```
+
+```{r}
+nodes <- tAfterBHMoreClimbMIRV[["mIRV=0.4"]][[3]]
+desc <- unlist(Descendants(tree, nodes))
+remNodes <- setdiff(seq(nl), desc)
+hist(mcols(yAll)[["pvalue"]][c(remNodes, desc)])
+```
