@@ -1,0 +1,47 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+quantDir <- "/fs/cbcb-scratch/jfan03/treeterm-paper/output/seed=1_fc=2:6/post_type=gibbs_nrep=100_tf=100/salmon_quants"
+saveDir <- "environment/brain_sim_nodtu/mode=gc_bias/post_type=gibbs_nrep=100_tf=100/comp_trees_updated_sim"
+samples <- as.vector(outer(c(1:6), c(1,2), function(x,y) paste(x,y,sep="_")))
+files <- file.path(quantDir, samples, "quant.sf")
+coldata <- data.frame(files = files, names = samples, condition = as.factor(rep(c(1,2),each=6)))
+clustFile <- "/fs/cbcb-scratch/jfan03/treeterm-paper/output/seed=1_fc=2:6/post_type=gibbs_nrep=100_tf=100/terminus/no_threshold0/cluster_nwk.txt"
+tseCons <- buildTSE(treeTermFile = clustFile, coldata = coldata)
+treeCons <- rowTree(tseCons)
+l <- length(treeCons$tip)
+
+txdb <- makeTxDbFromGFF(file="/fs/cbcb-lab/rob/students/noor/Uncertainity/brain_sim/annotation/gencode.v26.annotation.gtf.gz")
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+tInds <- match(rownames(tseCons)[1:l], tx2gene[,"TXNAME"])
+mapDf <- tx2gene[tInds,c("GENEID", "TXNAME")]
+save(mapDf, file = file.path(saveDir, "mapDf.RData"))
+```
+
+```{r}
+yAll <- computeSizeFactors(tseCons)
+yAll <- scaleInfReps(yAll)
+yAll <- labelKeep(yAll)
+
+set.seed(10)
+yTxps <- swish(yAll[1:l,], x = "condition")
+print(sum(mcols(yTxps)[["qvalue"]] <= 0.1, na.rm = T))
+
+set.seed(10)
+yInn <- swish(yAll[(l+1):nrow(yAll),], x = "condition")
+
+pvals <- c(mcols(yTxps)[["pvalue"]], mcols(yInn)[["pvalue"]])
+signs <- computeSign(yAll, "condition")
+mIRV <- mcols(yAll)[["meanInfRV"]]
+
+treeDEFDR_OL <- list() ## Only leaf
+print(system.time(treeDEFDR_OL[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(pvals, mIRV, treeCons, 0.4, alpha, signs, cores=3), mc.cores=3)))
+save(treeDEFDR_OL, file = file.path(saveDir, "treeDEFDR_OL.RData"))
+```
