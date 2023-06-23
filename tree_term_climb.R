@@ -59,13 +59,16 @@ computeSign <- function(y, x, pc = 5, minP = 0.7) {
 
 estimatePThresh <- function(pvalues, adjPval = 0.05, type = "BH") {
     library(fdrtool)
-    if(class(pvalues) != "numeric")
-        stop("pvalues not numeric")
+
+    if(!(class(pvalues) == "numeric")) {
+        stop("not numeric")
+    }
+
     if(type=="BH") {
         adPval <- which.min(abs(p.adjust(pvalues, method = "BH") - adjPval))
         return(pvalues[adPval])
     }
-    else{
+    else {
         pvalues <- pvalues[!is.na(pvalues)]
         fdrIn <- which.min(abs(fdrtool(pvalues, statistic="pvalue")[["lfdr"]] - adjPval))
         return(pvalues[fdrIn])
@@ -395,33 +398,33 @@ runTreeTermAlpha <- function(tree, y, cond, minInfRV, pvalue, pCutOff = 0.05, pC
 }
 
 
-meetCriteria <- function(yAll, tree, signs, mIRVCut, pCut, nInd) {
+meetCriteria <- function(pvalues, meanInfRV, tree, signs, mIRVCut, pCut, nInd) {
     #print(nInd)
-    if(mcols(yAll)[nInd, "pvalue"] > pCut | is.na(mcols(yAll)[nInd, "pvalue"]))
+    if(pvalues[nInd] > pCut | is.na(pvalues[nInd]))
         return(F)
-    if(nInd < length(tree$tip)) {  ## leaf node that is significant
-       if(is.na(mcols(yAll)[nInd,"pvalue"]))
+    if(nInd <= length(tree$tip)) {  ## leaf node that is significant
+       if(is.na(pvalues[nInd]))
            return(F)
-       if(mcols(yAll)[nInd,"pvalue"] <= pCut)
+       if(pvalues[nInd] <= pCut)
            return(T)
     }
 
     desc <- unlist(Descendants(tree, nInd,  'all')) ## Inner nodes
     children <- Descendants(tree, nInd,  'child')
     #if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[desc,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
-    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(mcols(yAll)[children,"meanInfRV"] > mIRVCut)) { ##same sign and minInfRV
-        ##IS.NA()
-            if(sum(is.na(mcols(yAll)[desc,"pvalue"])) > 0 | !all(mcols(yAll)[desc,"pvalue"] <= pCut, na.rm=T)) {
-                if(sum(is.na(mcols(yAll)[children,"pvalue"])) > 0)
+    if((all(signs[desc] >= 0) | all(signs[desc] <= 0)) & all(meanInfRV[children] > mIRVCut)) { ##same sign and minInfRV
+            ##IS.NA() #Atleast one descendant that is not null
+            if(sum(is.na(pvalues[desc])) > 0 | !all(pvalues[desc] <= pCut, na.rm=T)) {
+                if(sum(is.na(pvalues[children])) > 0)
                     return(T)
-                if(!all(mcols(yAll)[children,"pvalue"] <= pCut))  ##all children cant be significant
+                if(!all(pvalues[children] <= pCut))  ##all children cant be significant
                     return(T)
             }
     }
     return(F)
 }
 
-findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
+findCNodes <- function(pvalues, meanInfRV, tree, ind, pCut, mIRVCut, signs) {
     # dNodes <- Descendants(tree, nrow(y)+1, "child")
     # dNodes <- dNodes[sapply(Descendants(tree, dNodes),length) > 1]
     # dNodes <- dNodes[sapply(Descendants(tree, dNodes, "all"), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)>1)]
@@ -431,9 +434,9 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes),length) > 1]
     # pNodes <- pNodes[sapply(Descendants(tree, pNodes), function(nodes) sum(mcols(yAll)[nodes,"qvalue"] < 0.1, na.rm=T)==1)]
     desc <- unlist(Descendants(tree, ind, "all"))
-    sigNodes <- desc[which(mcols(yAll)[desc,"pvalue"] <= pCut)]
-    if(!is.na(mcols(yAll)[ind,"pvalue"])) {
-        if(mcols(yAll)[ind,"pvalue"] <= pCut & ind > length(tree$tip))
+    sigNodes <- desc[which(pvalues[desc] <= pCut)]
+    if(!is.na(pvalues[ind])) {
+        if(pvalues[ind] <= pCut & ind > length(tree$tip))
             sigNodes <- c(ind, sigNodes)
     }
 
@@ -458,44 +461,46 @@ findCNodes <- function(yAll, tree, ind, pCut, mIRVCut, signs) {
     sigCons <- c(sigCons, setdiff(sigNodes,c(sigCons,sigCondD)))
     # print(sigNodes)
     # print(sigCons)
-    nodes <- lapply(sigCons, function(ind) findTNode(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs))
+    nodes <- lapply(sigCons, function(ind) findTNode(pvalues, meanInfRV, tree, ind, sigNodes, pCut, mIRVCut, signs))
     if(sum(is.na(unlist(nodes))) > 0)
       print(ind)
     return(unlist(nodes))
 }
 
-findTNode <- function(yAll, tree, ind, sigNodes, pCut, mIRVCut, signs) {
+findTNode <- function(pvalues, meanInfRV, tree, ind, sigNodes, pCut, mIRVCut, signs) {
     if(length(intersect(c(ind,unlist(Descendants(tree, ind, "all"))), sigNodes)) == 0) ##Existing node does not have any descendants in the known significant node
         return(c())
 
     #print(sigNodes)
-    if(meetCriteria(yAll, tree, signs, mIRVCut, pCut, ind))
+    if(meetCriteria(pvalues, meanInfRV, tree, signs, mIRVCut, pCut, ind))
         return(ind)
     children <- Descendants(tree, ind, "child")
     nodes <- c()
     for(child in children)
-        nodes <- c(nodes,findTNode(yAll, tree, child, sigNodes, pCut, mIRVCut, signs))
+        nodes <- c(nodes,findTNode(pvalues, meanInfRV, tree, child, sigNodes, pCut, mIRVCut, signs))
     if(sum(is.na(nodes))) {
       print(ind)
-}
+    }
     return(nodes)
 }
 
-climbMax <- function(pvalues, tree, mIRVCut, alpha, signs, minP=0.80, cores=1) {
+climbMax <- function(pvalues, meanInfRV, tree, mIRVCut, alpha, signs, minP=0.80, cores=1) {
     stopifnot(length(pvalues) == (length(tree$tip) + length(tree$node.label)))
+    stopifnot(length(pvalues) == length(meanInfRV))
     l <- length(tree$tip)
-    pThresh <- estimatePThresh(y, alpha)
-    if(sum(mcols(y)[["pvalue"]] <= pThresh, na.rm = T) == 0) {
+    pThresh <- estimatePThresh(pvalues[1:l], alpha)
+    print(pThresh)
+    if(sum(pvalues <= pThresh, na.rm = T) == 0) {
         message("no significant nodes found")
         return(c())
     }
     cNodes <- Descendants(tree, l+1, "child")
     leaves <- cNodes[cNodes <= l]
-    sigNodes <- leaves[which(mcols(y)[leaves, "pvalue"] <= pThresh)]
+    sigNodes <- leaves[which(pvalues[leaves] <= pThresh)]
     innNodes <- setdiff(cNodes, leaves)
     descN <- Descendants(tree, innNodes, "all")
-    descN <- innNodes[sapply(descN, function(nodes) sum(mcols(y)[nodes,"pvalue"] <= pThresh, na.rm=T)>0)]
-    sigs <- unlist(mclapply(descN, function(node) findCNodes(y, tree, node, pThresh, mIRVCut, signs), mc.cores=cores))
+    descN <- innNodes[sapply(descN, function(nodes) sum(pvalues[nodes] <= pThresh, na.rm=T)>0)]
+    sigs <- unlist(mclapply(descN, function(node) findCNodes(pvalues, meanInfRV, tree, node, pThresh, mIRVCut, signs), mc.cores=cores))
     sigNodes <- c(sigNodes, sigs)
     return(sigNodes)
 }
