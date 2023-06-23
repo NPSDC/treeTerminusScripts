@@ -1,0 +1,36 @@
+---
+title: "Run BOUTH"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+```{r}
+suppressPackageStartupMessages(library(BOUTH))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+saveDir <- "environment/real_datasets/GSE100505_EDL_MAST/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/DE"
+load(file.path(saveDir, "tseConsUp.RData"))
+tree <- rowTree(tseConsUp)
+l <- length(tree$tip)
+
+y <- fishpond::scaleInfReps(tseConsUp[1:l,])
+y <- labelKeep(y)
+mcols(y)[["keep"]] <- T
+set.seed(10)
+y <- swish(y, x="condition")
+
+bouthTree <- getTreeDf(tree)
+save(bouthTree, file=file.path(saveDir, "bouthTreeCons.RData"))
+pvalues <- mcols(y)[["pvalue"]]
+bouthBrain <- list()
+print(system.time(bouthBrain[['0.01']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.01, is.weighted = TRUE)))
+save(bouthBrain, file = file.path(saveDir, "bouthBrain.RData"))
+print(system.time(bouthBrain[['0.05']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.05, is.weighted = TRUE)))
+save(bouthBrain, file = file.path(saveDir, "bouthBrain.RData"))
+print(system.time(bouthBrain[['0.1']] <- bouth(anno.table = bouthTree, pvalue.leaves = pvalues, na.symbol = "unknown", far = 0.1, is.weighted = TRUE)))
+save(bouthBrain, file = file.path(saveDir, "bouthBrain.RData"))
+```

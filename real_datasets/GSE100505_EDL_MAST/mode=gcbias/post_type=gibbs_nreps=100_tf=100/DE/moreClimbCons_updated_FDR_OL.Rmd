@@ -1,0 +1,63 @@
+---
+title: "moreClimbCons.Rmd"
+output: html_document
+date: "2023-02-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Constructing TSE
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+
+# quantDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505_EDL_MAST/sal_out/mode_gcbias=True/posttype=gibbs_npost=100_tf=100"
+# metaData <- read.delim("/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505_EDL_MAST/SRR_Acc_List.txt")
+# samples <- metaData$RUN
+# files <- file.path(quantDir, samples, "quant.sf")
+# colData <- cbind(data.frame(files = files, names = samples), condition = as.factor(metaData$TissueName))
+# clustFile <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/real_datasets/GSE100505_EDL_MAST/term_out/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/no_threshold0/cluster_nwk.txt"
+saveDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/real_datasets/GSE100505_EDL_MAST/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/DE"
+# tseConsUp <- buildTSE(treeTermFile = clustFile, coldata = colData)
+# save(tseConsUp, file=file.path(saveDir, "tseConsUp.RData"))
+load(file.path(saveDir, "tseConsUp.RData"))
+treeCons <- rowTree(tseConsUp)
+l <- length(treeCons$tip)
+
+```
+
+#### Swish on the entire dataset
+```{r}
+yAll <- computeSizeFactors(tseConsUp)
+yAll <- scaleInfReps(yAll)
+yAll <- labelKeep(yAll)
+set.seed(10)
+yInn <- swish(yAll[(l+1):nrow(yAll),], x = "condition")
+set.seed(10)
+yTxps <- swish(yAll[1:l,], x = "condition")
+```
+
+```{r}
+treeCons <- rowTree(tseConsUp)
+signs <- computeSign(yAll, "condition")
+print(table(signs))
+levels <- node.depth(treeCons, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+#### Running climbing procedure
+```{r}
+pvals <- c(mcols(yTxps)[["pvalue"]],mcols(yInn)[["pvalue"]])
+mIRV <- mcols(yAll)[["meanInfRV"]]
+
+treeDEFDR_OL <- list() ## These are with mIRV criteria on child only
+print(system.time(treeDEFDR_OL[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(pvals, mIRV, treeCons, 0.4, alpha, signs, cores=3), mc.cores=3)))
+save(treeDEFDR_OL, file = file.path(saveDir, "treeDEFDR_OL.RData"))
+```

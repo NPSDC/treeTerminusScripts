@@ -26,13 +26,17 @@ tree <- rowTree(tseConsUp)
 yAll <- computeSizeFactors(tseConsUp)
 yAll <- scaleInfReps(yAll)
 yAll <- labelKeep(yAll)
-set.seed(1)
+l <- length(tree$tip)
+set.seed(10)
+yL <- swish(yAll[1:l,], x="condition")
+set.seed(10)
+yInn <- swish(yAll[(l+1):nrow(yAll),], x="condition")
 yAll <- swish(yAll, x = "condition")
-mcols(yAll)[["pvalue"]] <- c(mcols(yTxps)[["pvalue"]], mcols(yInn)[["pvalue"]])
+mcols(yAll)[["pvalue"]] <- c(mcols(yL)[["pvalue"]], mcols(yInn)[["pvalue"]])
 
 swishRes <- data.frame(mcols(yAll))
 swishRes$node <- seq(1:nrow(yAll))
-swishRes <- swishRes[,-c("keep")]
+swishRes <- swishRes[,-c(3)]
 
 print(system.time(cSwish <- getCand(tree,
                  score_data = swishRes,
@@ -40,7 +44,7 @@ print(system.time(cSwish <- getCand(tree,
                  p_column = "pvalue",
                  sign_column = "log2FC",
                  )))
-save(cSwish, file=file.path(saveDir, "cSwishCons.RData"))
+save(cSwish, file=file.path(saveDir, "cSwishCons_OL.RData"))
 gc()
 ```
 
@@ -52,5 +56,5 @@ bSwish <- lapply(c(0.01,0.05,0.1), function(alpha) {
                       p_column = "pvalue", sign_column = "log2FC", limit_rej=alpha)
 })
 
-save(bSwish, file=file.path(saveDir, "bSwishCons.RData"))
+save(bSwish, file=file.path(saveDir, "bSwishCons_OL.RData"))
 ```
