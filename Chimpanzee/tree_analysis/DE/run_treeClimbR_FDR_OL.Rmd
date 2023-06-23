@@ -1,0 +1,57 @@
+---
+title: "Run TreeClimbR"
+output: html_document
+date: "2023-02-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading TSE experiment
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+suppressPackageStartupMessages(library(treeclimbR))
+saveDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/Chimp/DE"
+load(file = file.path(saveDir, "yAll.RData"))
+treeCons <- rowTree(yAll)
+```
+
+#### Swish on the entire dataset 
+```{r}
+l <- length(treeCons$tip)
+set.seed(10)
+yTxps <- swish(yAll[1:l,], x="tissue")
+set.seed(10)
+yInn <- swish(yAll[(l+1):nrow(yAll),], x="tissue")
+yAll <- swish(yAll, x = "tissue")
+mcols(yAll)[["pvalue"]] <- c(mcols(yTxps)[["pvalue"]], mcols(yInn)[["pvalue"]])
+
+swishRes <- data.frame(mcols(yAll))
+swishRes$node <- seq(1:nrow(yAll))
+swishRes <- swishRes[,!colnames(swishRes) %in% c("keep")]
+
+print(system.time(cSwish <- getCand(treeCons,
+                 score_data = swishRes,
+                 node_column = "node",
+                 p_column = "pvalue",
+                 sign_column = "log2FC",
+                 )))
+save(cSwish, file=file.path(saveDir, "cSwishConsFDR_OL.RData"))
+gc()
+```
+
+```{r}
+# gc()
+bSwish <- lapply(c(0.01,0.05,0.1), function(alpha) {
+    evalCand(tree = treeCons, levels = cSwish$candidate_list,
+                      score_data = swishRes, node_column = "node",
+                      p_column = "pvalue", sign_column = "log2FC", limit_rej=alpha)
+})
+
+save(bSwish, file=file.path(saveDir, "bSwishConsFDR_OL.RData"))
+```

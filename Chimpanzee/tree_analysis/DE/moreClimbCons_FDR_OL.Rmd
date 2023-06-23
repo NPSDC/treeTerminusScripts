@@ -1,0 +1,47 @@
+---
+title: "moreClimbCons.Rmd"
+output: html_document
+date: "2023-02-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Constructing TSE
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(beaveR))
+
+saveDir <- "/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts/environment/Chimp/DE"
+load(file = file.path(saveDir, "yAll.RData"))
+treeCons <- rowTree(yAll)
+l <- length(treeCons$tip)
+set.seed(10)
+yTxps <- swish(yAll[1:l,], x="tissue")
+set.seed(10)
+yInn <- swish(yAll[(l+1):nrow(yAll),], x="tissue")
+```
+
+```{r}
+treeCons <- rowTree(yAll)
+signs <- computeSign(yAll, "tissue")
+print(table(signs))
+levels <- node.depth(treeCons, 2)
+levels <- ifelse(levels > 4, 5, levels)
+print(table(levels))
+print(table(signs, levels))
+```
+
+#### Running climbing procedure
+```{r}
+pvals <- c(mcols(yTxps)[["pvalue"]],mcols(yInn)[["pvalue"]])
+mIRV <- mcols(yAll)[["meanInfRV"]]
+
+treeDEFDR_OL <- list() ## These are with mIRV criteria on child only
+print(system.time(treeDEFDR_OL[["mIRV=0.4"]] <- mclapply(c(0.01, 0.05, 0.1), function(alpha) climbMax(pvals, mIRV, treeCons, 0.4, alpha, signs, cores=3), mc.cores=3)))
+save(treeDEFDR_OL, file = file.path(saveDir, "treeDEFDR_OL.RData"))
+```
