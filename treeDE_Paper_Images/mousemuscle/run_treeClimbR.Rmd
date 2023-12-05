@@ -1,0 +1,72 @@
+---
+title: "Run TreeClimbR"
+output: html_document
+date: "2023-02-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+```
+
+#### Loading TSE experiment
+```{r}
+setwd('/fs/cbcb-lab/rob/students/noor/Uncertainity/treeTerminusScripts')
+suppressPackageStartupMessages(source("tree_helper_function.R"))
+suppressPackageStartupMessages(source("tree_term_climb.R"))
+suppressPackageStartupMessages(library(pracma))
+suppressPackageStartupMessages(library(beaveR))
+suppressPackageStartupMessages(library(treeclimbR))
+saveDir <- "environment/real_datasets/GSE100505_EDL_MAST/mode_gcbias=True/posttype=gibbs_npost=100_tf=100/DE"
+load(file=file.path(saveDir, "tseConsUp.RData"))
+tree <- rowTree(tseConsUp)
+l <- length(tree$tip)
+```
+
+#### Swish on the entire dataset 
+```{r}
+saveDir <- "treeDE_Paper_Images/mousemuscle"
+yAll <- computeSizeFactors(tseConsUp)
+yAll <- scaleInfReps(yAll)
+yAll <- labelKeep(yAll)
+set.seed(1)
+
+set.seed(10)
+yTxps <- swish(yAll[1:l,], x = "condition")
+print(sum(mcols(yTxps)[["qvalue"]] <= 0.1, na.rm = T))
+
+set.seed(10)
+yInn <- swish(yAll[(l+1):nrow(yAll),], x = "condition")
+mcols(yAll)[["pvalue"]] <- c(mcols(yTxps)[["pvalue"]], mcols(yInn)[["pvalue"]])
+infReps <- fishpond:::getInfReps(yAll)
+mcols(yAll)[["log2FC"]] <- fishpond:::getLog2FC(infReps, colData(yAll)[["condition"]])
+
+swishRes <- data.frame(mcols(yAll))
+swishRes$node <- seq(1:nrow(yAll))
+swishRes <- swishRes[,!colnames(swishRes) %in% c("keep")]
+tic()
+print(system.time(cSwish <- getCand(tree,
+                 score_data = swishRes,
+                 node_column = "node",
+                 p_column = "pvalue",
+                 sign_column = "log2FC",
+                 )))
+toc()
+save(cSwish, file=file.path(saveDir, "cSwishCons.RData"))
+gc()
+```
+
+```{r}
+# gc()
+alphas <- c(0.01,0.05,0.1)
+bSwish <- vector(mode="list",length=3)
+for(i in seq(alphas)) {
+    tic()
+    bSwish[[i]] <- evalCand(tree = tree, levels = cSwish$candidate_list,
+          score_data = swishRes, node_column = "node",
+          p_column = "pvalue", sign_column = "log2FC", limit_rej=alphas[i])
+    toc()
+}
+
+save(bSwish, file=file.path(saveDir, "bSwishCons.RData"))
+```
